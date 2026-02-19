@@ -34,13 +34,13 @@ const layers = ref<LayerInstance[]>([
     id: "distortion-2",
     type: "distortion",
     enabled: true,
-    values: { waveType: 0, freq: 1.5, amplitude: 0.4, sharpness: 6.7, pulseWidth: 0, skew: 0, direction: 90 },
+    values: { waveType: 0, freq: 1.9, amplitude: 0.4, sharpness: 1, pulseWidth: 0, skew: 0, direction: 0 },
   },
   {
     id: "distortion-1",
     type: "distortion",
     enabled: true,
-    values: { waveType: 1, freq: 3, amplitude: 0.51, sharpness: 6.7, pulseWidth: 0.04, skew: 0, direction: 45 },
+    values: { waveType: 1, freq: 3, amplitude: 0.51, sharpness: 6.7, pulseWidth: 0.04, skew: 0, direction: 315 },
   },
   {
     id: "gradient-1",
@@ -76,12 +76,15 @@ const selectedTemplate = computed(() => {
 // --- LFO Modulation ---
 
 const lfos = ref<LFOSource[]>([
-  { id: "lfo-1", label: "LFO 1", color: LFO_COLORS[0]!, points: clonePresetPoints("sine"), rate: 0.5, phase: 0, mode: "loop" },
+  { id: "lfo-1", label: "Drift", color: LFO_COLORS[0]!, points: clonePresetPoints("sine"), rate: 0.1, phase: 0, mode: "loop" },
+  { id: "lfo-2", label: "Pulse", color: LFO_COLORS[1]!, points: clonePresetPoints("sine"), rate: 0.13, phase: 0, mode: "loop" },
 ]);
 
 const assignments = ref<ModulationAssignment[]>([
-  { sourceId: "lfo-1", layerId: "distortion-1", paramName: "direction", depth: 30 },
-  { sourceId: "lfo-1", layerId: "distortion-1", paramName: "amplitude", depth: 0.2 },
+  { sourceId: "lfo-1", layerId: "distortion-1", paramName: "direction", depth: 90 },
+  { sourceId: "lfo-1", layerId: "gradient-1", paramName: "offsetX", depth: 0.5 },
+  { sourceId: "lfo-2", layerId: "distortion-1", paramName: "amplitude", depth: 0.4 },
+  { sourceId: "lfo-2", layerId: "distortion-1", paramName: "pulseWidth", depth: 0.25 },
 ]);
 
 const selectedLfoId = ref<string | null>(null);
