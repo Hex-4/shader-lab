@@ -17,10 +17,6 @@ uniform float sharpness;  // square: edge hardness (1=soft, 50=hard)
 uniform float pulseWidth; // square: lobe width modulation
 uniform float skew;       // triangle/sawtooth: lean (-1 to 1)
 
-// Animation
-uniform float speed;
-uniform float drift;
-
 #define PI 3.14159265359
 #define TAU 6.28318530718
 
@@ -73,22 +69,18 @@ void main() {
   vec2 centered = uv * 2.0 - 1.0;
   centered.x *= aspect;
 
-  // Direction with animated oscillation (drift controls rotation wobble)
-  float baseAngle = radians(direction);
-  float angle = baseAngle + drift * sin(u_time * speed * 0.1) * 1.57;
+  // Direction
+  float angle = radians(direction);
   vec2 dir = vec2(cos(angle), sin(angle));
 
   // Project UV onto wave direction
   float diag = dot(centered, dir);
 
-  // Compute wave with animated frequency modulation
+  // Compute wave
   float wave = computeWave(diag * freq);
 
-  // Animated amplitude (drift controls amplitude wobble)
-  float animatedAmplitude = amplitude * (1.0 + drift * (0.5 + 0.4 * sin(u_time * speed * 0.13)));
-
   // Displace in centered space, convert back to UV
-  vec2 displaced = centered + dir * wave * animatedAmplitude;
+  vec2 displaced = centered + dir * wave * amplitude;
   vec2 sampleUV = displaced;
   sampleUV.x /= aspect;
   sampleUV = sampleUV * 0.5 + 0.5;

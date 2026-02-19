@@ -39,17 +39,6 @@ export const LAYER_TEMPLATES: Record<LayerType, LayerTemplate> = {
         step: 0.1,
       },
     ],
-    animationUniforms: [
-      {
-        name: "speed",
-        type: "float",
-        label: "Speed",
-        default: 1.0,
-        min: 0,
-        max: 3,
-        step: 0.01,
-      },
-    ],
   },
 
   solid: {
@@ -100,8 +89,6 @@ export const LAYER_TEMPLATES: Record<LayerType, LayerTemplate> = {
         max: 1,
         step: 0.01,
       },
-    ],
-    animationUniforms: [
       {
         name: "speed",
         type: "float",
@@ -186,26 +173,6 @@ export const LAYER_TEMPLATES: Record<LayerType, LayerTemplate> = {
         step: 1,
       },
     ],
-    animationUniforms: [
-      {
-        name: "speed",
-        type: "float",
-        label: "Speed",
-        default: 1.0,
-        min: 0,
-        max: 3,
-        step: 0.01,
-      },
-      {
-        name: "drift",
-        type: "float",
-        label: "Drift",
-        default: 0.5,
-        min: 0,
-        max: 1,
-        step: 0.01,
-      },
-    ],
   },
 
   grain: {
@@ -232,8 +199,6 @@ export const LAYER_TEMPLATES: Record<LayerType, LayerTemplate> = {
         max: 16,
         step: 0.5,
       },
-    ],
-    animationUniforms: [
       {
         name: "speed",
         type: "float",

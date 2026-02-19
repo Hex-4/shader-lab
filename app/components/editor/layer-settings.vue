@@ -1,18 +1,66 @@
 <script setup lang="ts">
-import { CollapsibleRoot, CollapsibleTrigger, CollapsibleContent } from "reka-ui";
+import { CollapsibleRoot, CollapsibleTrigger, CollapsibleContent, ContextMenuRoot, ContextMenuTrigger, ContextMenuPortal, ContextMenuContent, ContextMenuItem } from "reka-ui";
 import { ChevronRightIcon, DicesIcon, RotateCcwIcon } from "lucide-vue-next";
-import type { LayerInstance, LayerTemplate, LayerUniformDef } from "#shared/types/editor";
+import type { LayerInstance, LayerTemplate, LayerUniformDef, ModulationAssignment, LFOSource } from "#shared/types/editor";
 import type { GradientStop } from "#shared/types";
 
 type Props = {
   layer: LayerInstance;
   template: LayerTemplate;
+  assignments: ModulationAssignment[];
+  lfos: LFOSource[];
+  draggingLfoId: string | null;
 };
 
-const { layer, template } = defineProps<Props>();
+type Emits = {
+  "assign-lfo": [paramName: string];
+  "remove-assignment": [sourceId: string, paramName: string];
+  "update-depth": [sourceId: string, paramName: string, depth: number];
+};
+
+const { layer, template, assignments, lfos, draggingLfoId } = defineProps<Props>();
+const emit = defineEmits<Emits>();
 
 const settingsOpen = ref(true);
-const animationOpen = ref(true);
+
+function getAssignment(paramName: string): ModulationAssignment | undefined {
+  return assignments.find((a) => a.layerId === layer.id && a.paramName === paramName);
+}
+
+function getLfoColor(sourceId: string): string | undefined {
+  return lfos.find((l) => l.id === sourceId)?.color;
+}
+
+// Injected LFO values for live indicator
+const lfoValues = inject<Ref<Record<string, number>>>("lfoValues", ref({}));
+
+function getLiveValue(def: LayerUniformDef): number | undefined {
+  const assignment = getAssignment(def.name);
+  if (!assignment) return undefined;
+  return lfoValues.value[assignment.sourceId];
+}
+
+function getModulatedFloat(paramName: string, fallback: number): number {
+  const base = (layer.values[paramName] as number) ?? fallback;
+  const assignment = getAssignment(paramName);
+  if (!assignment) return base;
+  const lfoValue = lfoValues.value[assignment.sourceId] ?? 0;
+  return base + lfoValue * assignment.depth;
+}
+
+function getModInfo(def: LayerUniformDef): { color: string; depth: number } | null {
+  const assignment = getAssignment(def.name);
+  if (!assignment) return null;
+  const color = getLfoColor(assignment.sourceId);
+  if (!color) return null;
+  return { color, depth: assignment.depth };
+}
+
+function onDepthUpdate(def: LayerUniformDef, depth: number) {
+  const assignment = getAssignment(def.name);
+  if (!assignment) return;
+  emit("update-depth", assignment.sourceId, def.name, depth);
+}
 
 // --- Randomize ---
 
@@ -60,11 +108,6 @@ function resetToDefaults() {
       layer.values[def.name] = (def.default as GradientStop[]).map((s) => ({ ...s }));
     } else {
       layer.values[def.name] = def.default;
-    }
-  }
-  if (template.animationUniforms) {
-    for (const def of template.animationUniforms) {
-      layer.animationValues[def.name] = def.default;
     }
   }
 }
@@ -125,9 +168,7 @@ function setVec2Y(def: LayerUniformDef, target: Record<string, unknown>, y: numb
   target[def.name] = [c[0], y];
 }
 
-const hasAnimation = computed(() => {
-  return template.animationUniforms && template.animationUniforms.length > 0;
-});
+// Distortion layer: conditionally show params based on wave type
 
 // Distortion layer: conditionally show params based on wave type
 const isDistortion = computed(() => layer.type === "distortion");
@@ -163,11 +204,11 @@ function isUniformVisible(def: LayerUniformDef): boolean {
       <div v-if="isDistortion" class="border-b border-edge px-3 py-3">
         <EditorWavePreview
           :wave-type="currentWaveType"
-          :freq="(layer.values.freq as number) ?? 3"
-          :amplitude="(layer.values.amplitude as number) ?? 0.5"
-          :sharpness="(layer.values.sharpness as number) ?? 6.7"
-          :pulse-width="(layer.values.pulseWidth as number) ?? 0"
-          :skew="(layer.values.skew as number) ?? 0"
+          :freq="getModulatedFloat('freq', 3)"
+          :amplitude="getModulatedFloat('amplitude', 0.5)"
+          :sharpness="getModulatedFloat('sharpness', 6.7)"
+          :pulse-width="getModulatedFloat('pulseWidth', 0)"
+          :skew="getModulatedFloat('skew', 0)"
         />
       </div>
 
@@ -191,15 +232,38 @@ function isUniformVisible(def: LayerUniformDef): boolean {
             <template v-for="def in template.uniforms" :key="def.name">
               <template v-if="isUniformVisible(def)">
               <!-- Float / Int -->
-              <UiSliderField
-                v-if="def.type === 'float' || def.type === 'int'"
-                :model-value="getFloat(def, layer.values)"
-                :label="def.label"
-                :min="def.min"
-                :max="def.max"
-                :step="def.step ?? (def.type === 'int' ? 1 : 0.01)"
-                @update:model-value="setFloat(def, layer.values, $event)"
-              />
+              <ContextMenuRoot v-if="def.type === 'float' || def.type === 'int'">
+                <ContextMenuTrigger as-child>
+                  <div
+                    @pointerup="draggingLfoId && emit('assign-lfo', def.name)"
+                  >
+                    <UiSliderField
+                      :model-value="getFloat(def, layer.values)"
+                      :label="def.label"
+                      :min="def.min"
+                      :max="def.max"
+                      :step="def.step ?? (def.type === 'int' ? 1 : 0.01)"
+                      :mod-color="getModInfo(def)?.color"
+                      :mod-depth="getModInfo(def)?.depth"
+                      :mod-live-value="getLiveValue(def)"
+                      :is-drop-target="draggingLfoId !== null"
+                      @update:model-value="setFloat(def, layer.values, $event)"
+                      @update:mod-depth="onDepthUpdate(def, $event)"
+                    />
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuPortal v-if="getAssignment(def.name)">
+                  <ContextMenuContent class="z-[9999] min-w-36 rounded-xl border border-edge bg-base-1 p-1 shadow-2xl backdrop-blur-xl">
+                    <ContextMenuItem
+                      class="flex cursor-default items-center gap-2 rounded-md px-2.5 py-1.5 text-copy-sm text-primary select-none hover:bg-surface-1 focus:bg-surface-1 focus:outline-0"
+                      @click="emit('remove-assignment', getAssignment(def.name)!.sourceId, def.name)"
+                    >
+                      <span class="size-2 rounded-full" :style="{ backgroundColor: getLfoColor(getAssignment(def.name)!.sourceId) }" />
+                      Remove {{ lfos.find(l => l.id === getAssignment(def.name)!.sourceId)?.label }}
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenuPortal>
+              </ContextMenuRoot>
               <!-- Color -->
               <UiColorField
                 v-else-if="def.type === 'color'"
@@ -254,42 +318,7 @@ function isUniformVisible(def: LayerUniformDef): boolean {
         </CollapsibleContent>
       </CollapsibleRoot>
 
-      <!-- Animation section -->
-      <div v-if="hasAnimation" class="flex flex-col border-t border-edge">
-        <div class="flex items-center justify-between px-3 py-2">
-          <span class="text-copy-sm font-medium text-secondary select-none">Animation</span>
-          <div class="flex items-center gap-1">
-            <div class="w-6">
-              <UiButton
-                v-if="layer.animationEnabled"
-                variant="ghost"
-                size="sm"
-                :icon-left="DicesIcon"
-                title="Randomize animation"
-                @click="randomizeUniforms(template.animationUniforms!, layer.animationValues)"
-              />
-            </div>
-            <UiToggle v-model="layer.animationEnabled" />
-          </div>
-        </div>
-        <CollapsibleRoot :open="layer.animationEnabled">
-          <CollapsibleContent class="overflow-hidden data-[state=closed]:animate-collapse data-[state=open]:animate-expand">
-            <div class="flex flex-col gap-2.5 px-3 py-3">
-              <template v-for="def in template.animationUniforms" :key="def.name">
-                <UiSliderField
-                  v-if="def.type === 'float' || def.type === 'int'"
-                  :model-value="getFloat(def, layer.animationValues)"
-                  :label="def.label"
-                  :min="def.min"
-                  :max="def.max"
-                  :step="def.step ?? (def.type === 'int' ? 1 : 0.01)"
-                  @update:model-value="setFloat(def, layer.animationValues, $event)"
-                />
-              </template>
-            </div>
-          </CollapsibleContent>
-        </CollapsibleRoot>
-      </div>
+    
     </div>
   </aside>
 </template>

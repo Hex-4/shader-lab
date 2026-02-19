@@ -26,7 +26,6 @@ export type LayerTemplate = {
   category: LayerCategory;
   description: string;
   uniforms: LayerUniformDef[];
-  animationUniforms?: LayerUniformDef[];
 };
 
 export type LayerInstance = {
@@ -34,8 +33,6 @@ export type LayerInstance = {
   type: LayerType;
   enabled: boolean;
   values: Record<string, unknown>;
-  animationEnabled: boolean;
-  animationValues: Record<string, unknown>;
 };
 
 export type RenderPass = {
@@ -44,4 +41,31 @@ export type RenderPass = {
   uniforms: Record<string, unknown>;
   inputLayerId: string | null;
   isOutput: boolean;
+};
+
+// --- LFO Modulation System ---
+
+export type WavePoint = {
+  x: number;       // 0-1, position in cycle
+  y: number;       // 0-1, value (0 = min, 1 = max)
+  curve: number;   // -1 to 1, quadratic bezier curve control for segment after this point
+};
+
+export type LFOPlaybackMode = "loop" | "pingpong";
+
+export type LFOSource = {
+  id: string;
+  label: string;
+  color: string;
+  points: WavePoint[];
+  rate: number;     // Hz
+  phase: number;    // 0-360 degrees
+  mode: LFOPlaybackMode;
+};
+
+export type ModulationAssignment = {
+  sourceId: string;
+  layerId: string;
+  paramName: string;
+  depth: number;   // signed: positive = endpoint above base, negative = endpoint below base
 };

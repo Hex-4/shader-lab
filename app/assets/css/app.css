@@ -340,6 +340,19 @@
   );
 }
 
+@utility bg-danger {
+  background-color: var(--danger);
+}
+@utility text-danger {
+  color: var(--danger);
+}
+@utility bg-warn {
+  background-color: var(--warn);
+}
+@utility text-warn {
+  color: var(--warn);
+}
+
 /* base */
 html,
 body,

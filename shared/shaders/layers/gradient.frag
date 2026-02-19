@@ -6,7 +6,6 @@ uniform vec2 u_resolution;
 uniform float u_time;
 uniform sampler2D u_gradient;
 uniform float angle;
-uniform float speed;
 uniform float offsetX;
 
 void main() {
@@ -14,8 +13,7 @@ void main() {
   uv = uv * 2.0 - 1.0;
   uv.x *= u_resolution.x / u_resolution.y;
 
-  // Animated horizontal drift
-  uv.x += offsetX + sin(u_time * speed * 0.15) * 0.5 + cos(u_time * speed * 0.08) * 0.3;
+  uv.x += offsetX;
 
   // Project onto gradient direction
   float a = radians(angle);

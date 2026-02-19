@@ -6,11 +6,22 @@ type Props = {
   max?: number;
   step?: number;
   disabled?: boolean;
+  modColor?: string;
+  modDepth?: number;
+  modLiveValue?: number;
+  isDropTarget?: boolean;
 };
 
-const { name, label, min = 0, max = 1, step = 0.01, disabled = false } = defineProps<Props>();
+type Emits = {
+  "update:mod-depth": [value: number];
+};
+
+const { name, label, min = 0, max = 1, step = 0.01, disabled = false, modColor, modDepth, modLiveValue, isDropTarget = false } = defineProps<Props>();
+const emit = defineEmits<Emits>();
 
 const model = defineModel<number>({ default: 0.5 });
+
+const hasModulation = computed(() => modColor != null && modDepth != null);
 
 const isEditing = ref(false);
 const inputRef = ref<HTMLInputElement | null>(null);
@@ -68,13 +79,27 @@ function commitValue(e: Event) {
         {{ displayValue }}
       </button>
     </div>
-    <UiSlider
-      v-model="model"
-      :name="name"
-      :min="min"
-      :max="max"
-      :step="step"
-      :disabled="disabled"
-    />
+    <div class="rounded bg-base-0">
+      <UiModSlider
+        v-if="hasModulation"
+        :base="model"
+        :depth="modDepth!"
+        :min="min"
+        :max="max"
+        :step="step"
+        :color="modColor!"
+        :live-value="modLiveValue"
+        @update:depth="emit('update:mod-depth', $event)"
+      />
+      <UiSlider
+        v-model="model"
+        :name="name"
+        :min="min"
+        :max="max"
+        :step="step"
+        :disabled="disabled"
+        :is-drop-target="isDropTarget"
+      />
+    </div>
   </div>
 </template>
