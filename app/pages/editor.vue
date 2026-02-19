@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { LayerInstance, LayerType, LFOSource, ModulationAssignment } from "#shared/types/editor";
 import LAYER_TEMPLATES from "#shared/editor/layer-templates";
-import { LFO_COLORS } from "#shared/editor/lfo-colors";
+import { LFO_COLORS, nextLfoColor } from "#shared/editor/lfo-colors";
 import { clonePresetPoints } from "#shared/editor/lfo-presets";
 import type { GradientStop } from "#shared/types";
 
@@ -138,11 +138,25 @@ function removeLayer(id: string) {
   const idx = layers.value.findIndex((l) => l.id === id);
   if (idx === -1) return;
   layers.value.splice(idx, 1);
-  // Remove any assignments for this layer
   assignments.value = assignments.value.filter((a) => a.layerId !== id);
   if (selectedLayerId.value === id) {
     selectedLayerId.value = layers.value[Math.min(idx, layers.value.length - 1)]?.id ?? null;
   }
+}
+
+function duplicateLayer(id: string) {
+  const source = layers.value.find((l) => l.id === id);
+  if (!source) return;
+  const newId = `${source.type}-${++layerCounter}`;
+  const clone: LayerInstance = {
+    id: newId,
+    type: source.type,
+    enabled: source.enabled,
+    values: JSON.parse(JSON.stringify(source.values)),
+  };
+  const idx = layers.value.findIndex((l) => l.id === id);
+  layers.value.splice(idx, 0, clone);
+  selectedLayerId.value = newId;
 }
 
 // --- LFO Management ---
@@ -151,6 +165,26 @@ function deleteLfo(id: string) {
   lfos.value = lfos.value.filter((l) => l.id !== id);
   assignments.value = assignments.value.filter((a) => a.sourceId !== id);
   if (selectedLfoId.value === id) selectedLfoId.value = null;
+}
+
+function duplicateLfo(id: string) {
+  const source = lfos.value.find((l) => l.id === id);
+  if (!source) return;
+  const newId = `lfo-${Date.now()}`;
+  const existingColors = lfos.value.map((l) => l.color);
+  const clone: LFOSource = {
+    ...source,
+    id: newId,
+    label: `${source.label}`,
+    color: nextLfoColor(existingColors),
+    points: source.points.map((p) => ({ ...p })),
+  };
+  lfos.value.push(clone);
+  selectedLfoId.value = newId;
+}
+
+function clearLfoAssignments(id: string) {
+  assignments.value = assignments.value.filter((a) => a.sourceId !== id);
 }
 
 // --- Modulation Assignment Management ---
@@ -193,15 +227,31 @@ function updateDepth(sourceId: string, paramName: string, depth: number) {
 
 // --- Drag LFO handling ---
 
-function onDragStart(lfoId: string) {
+const dragPos = ref({ x: -999, y: -999 });
+
+const draggingLfo = computed(() => {
+  if (!draggingLfoId.value) return null;
+  return lfos.value.find((l) => l.id === draggingLfoId.value) ?? null;
+});
+
+function onDragStart(lfoId: string, x: number, y: number) {
   draggingLfoId.value = lfoId;
+  dragPos.value = { x, y };
+
+  function onMove(e: PointerEvent) {
+    dragPos.value = { x: e.clientX, y: e.clientY };
+  }
 
   function onUp() {
-    // If dropped somewhere that didn't handle it, cancel
-    setTimeout(() => { draggingLfoId.value = null; }, 50);
+    setTimeout(() => {
+      draggingLfoId.value = null;
+      dragPos.value = { x: -999, y: -999 };
+    }, 50);
+    window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
   }
 
+  window.addEventListener("pointermove", onMove);
   window.addEventListener("pointerup", onUp);
 }
 
@@ -225,6 +275,7 @@ const selectedLayerAssignments = computed(() => {
       v-model:layers="layers"
       v-model:selected-layer-id="selectedLayerId"
       @add-layer="addLayer"
+      @duplicate-layer="duplicateLayer"
       @remove-layer="removeLayer"
     />
 
@@ -268,11 +319,28 @@ const selectedLayerAssignments = computed(() => {
       />
     </Transition>
 
+    <!-- Drag ghost -->
+    <div
+      v-if="draggingLfo"
+      class="pointer-events-none fixed z-50 flex w-max items-center gap-2 whitespace-nowrap rounded-lg border border-edge bg-base-1 px-2.5 py-1.5 text-copy-xs font-medium text-primary shadow-2xl"
+      :style="{
+        left: `${dragPos.x}px`,
+        top: `${dragPos.y}px`,
+        transform: 'translate(-50%, -50%)',
+      }"
+    >
+      <span class="size-2.5 rounded-full" :style="{ backgroundColor: draggingLfo.color }" />
+      <span>{{ draggingLfo.label }}</span>
+    </div>
+
     <!-- LFO Rack (bottom bar) -->
     <EditorLfoRack
       v-model:lfos="lfos"
       v-model:selected-lfo-id="selectedLfoId"
-      @drag-start="onDragStart"
+      @drag-start="(id: string, x: number, y: number) => onDragStart(id, x, y)"
+      @duplicate-lfo="duplicateLfo"
+      @clear-assignments="clearLfoAssignments"
+      @delete-lfo="deleteLfo"
     />
   </ClientOnly>
 </template>

@@ -6,6 +6,7 @@ import type { LayerInstance, LayerType } from "#shared/types/editor";
 type Emits = {
   "add-layer": [type: LayerType];
   "remove-layer": [id: string];
+  "duplicate-layer": [id: string];
 };
 
 const layers = defineModel<LayerInstance[]>("layers", { required: true });
@@ -39,6 +40,7 @@ function handleAddLayer(type: LayerType) {
             <PopoverContent
               side="right"
               :side-offset="12"
+              :collision-padding="12"
               class="z-50 rounded-xl border border-edge bg-base-1 shadow-2xl backdrop-blur-xl data-[state=open]:animate-contentShow"
             >
               <EditorLayerPicker @select="handleAddLayer" />
@@ -59,7 +61,9 @@ function handleAddLayer(type: LayerType) {
           :dragging="draggingIndex === i"
           @select="selectedLayerId = layer.id"
           @toggle-enabled="toggleEnabled(layer)"
+          @duplicate="emit('duplicate-layer', layer.id)"
           @remove="emit('remove-layer', layer.id)"
+          @update:name="layer.name = $event"
         />
       </div>
     </div>

@@ -5,7 +5,10 @@ import { LFO_COLORS, nextLfoColor } from "#shared/editor/lfo-colors";
 import { clonePresetPoints } from "#shared/editor/lfo-presets";
 
 type Emits = {
-  "drag-start": [lfoId: string];
+  "drag-start": [lfoId: string, x: number, y: number];
+  "duplicate-lfo": [lfoId: string];
+  "clear-assignments": [lfoId: string];
+  "delete-lfo": [lfoId: string];
 };
 
 const lfos = defineModel<LFOSource[]>("lfos", { required: true });
@@ -35,14 +38,17 @@ function selectLfo(id: string) {
 </script>
 
 <template>
-  <div class="fixed bottom-4 left-60 right-80 z-40 mx-auto flex h-12 max-w-lg items-center gap-2 rounded-2xl border border-edge bg-base-1/80 px-4 shadow-2xl backdrop-blur-xl">
+  <div class="fixed bottom-4 left-60 right-80 z-40 mx-auto flex max-w-lg items-center gap-2 rounded-2xl border border-edge bg-base-1/80 p-2 shadow-2xl backdrop-blur-xl">
     <EditorLfoPill
       v-for="lfo in lfos"
       :key="lfo.id"
       :lfo="lfo"
       :selected="selectedLfoId === lfo.id"
       @select="selectLfo(lfo.id)"
-      @drag-start="emit('drag-start', lfo.id)"
+      @drag-start="(x: number, y: number) => emit('drag-start', lfo.id, x, y)"
+      @duplicate="emit('duplicate-lfo', lfo.id)"
+      @clear-assignments="emit('clear-assignments', lfo.id)"
+      @delete="emit('delete-lfo', lfo.id)"
     />
     <button
       class="flex size-8 items-center justify-center rounded-lg text-tertiary transition-colors duration-150 hover:bg-surface-1 hover:text-secondary"

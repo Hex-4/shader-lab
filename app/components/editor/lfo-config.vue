@@ -24,9 +24,9 @@ function applyPreset(key: string) {
   <div class="fixed bottom-20 left-60 right-80 z-40 mx-auto max-w-lg rounded-2xl border border-edge bg-base-1/80 shadow-2xl backdrop-blur-xl">
     <div class="flex flex-col gap-3 p-3">
       <div class="flex items-center justify-between px-1">
-        <div class="flex items-center gap-2">
-          <span class="size-2.5 rounded-full" :style="{ backgroundColor: lfo.color }" />
-          <span class="text-copy-sm font-medium text-primary select-none">{{ lfo.label }}</span>
+        <div class="flex min-w-0 flex-1 items-center gap-2">
+          <span class="size-2.5 shrink-0 rounded-full" :style="{ backgroundColor: lfo.color }" />
+          <UiEditableText v-model="lfo.label" fill class="text-copy-sm font-medium text-primary" />
         </div>
         <button
           class="flex size-6 items-center justify-center rounded-md text-tertiary transition-colors duration-150 hover:bg-surface-1 hover:text-secondary"

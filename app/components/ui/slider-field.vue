@@ -79,18 +79,19 @@ function commitValue(e: Event) {
         {{ displayValue }}
       </button>
     </div>
-    <div class="rounded bg-base-0">
-      <UiModSlider
-        v-if="hasModulation"
-        :base="model"
-        :depth="modDepth!"
-        :min="min"
-        :max="max"
-        :step="step"
-        :color="modColor!"
-        :live-value="modLiveValue"
-        @update:depth="emit('update:mod-depth', $event)"
-      />
+    <div class="grid rounded bg-base-0 transition-[grid-template-rows] duration-200 ease-out-expo" :style="{ gridTemplateRows: hasModulation ? '1fr auto' : '0fr auto' }">
+      <div class="min-h-0 overflow-hidden">
+        <UiModSlider
+          :base="model"
+          :depth="modDepth ?? 0"
+          :min="min"
+          :max="max"
+          :step="step"
+          :color="modColor ?? '#fff'"
+          :live-value="modLiveValue"
+          @update:depth="emit('update:mod-depth', $event)"
+        />
+      </div>
       <UiSlider
         v-model="model"
         :name="name"

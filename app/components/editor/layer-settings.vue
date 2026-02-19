@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CollapsibleRoot, CollapsibleTrigger, CollapsibleContent, ContextMenuRoot, ContextMenuTrigger, ContextMenuPortal, ContextMenuContent, ContextMenuItem } from "reka-ui";
+import { CollapsibleRoot, CollapsibleTrigger, CollapsibleContent } from "reka-ui";
 import { ChevronRightIcon, DicesIcon, RotateCcwIcon } from "lucide-vue-next";
 import type { LayerInstance, LayerTemplate, LayerUniformDef, ModulationAssignment, LFOSource } from "#shared/types/editor";
 import type { GradientStop } from "#shared/types";
@@ -168,7 +168,9 @@ function setVec2Y(def: LayerUniformDef, target: Record<string, unknown>, y: numb
   target[def.name] = [c[0], y];
 }
 
-// Distortion layer: conditionally show params based on wave type
+function resetUniform(def: LayerUniformDef) {
+  layer.values[def.name] = def.default;
+}
 
 // Distortion layer: conditionally show params based on wave type
 const isDistortion = computed(() => layer.type === "distortion");
@@ -189,7 +191,7 @@ function isUniformVisible(def: LayerUniformDef): boolean {
     <!-- Header -->
     <div class="flex shrink-0 items-center justify-between border-b border-edge px-3 py-2.5">
       <div class="flex flex-col">
-        <span class="text-copy-sm font-medium text-primary select-none">{{ template.label }}</span>
+        <span class="text-copy-sm font-medium text-primary select-none">{{ layer.name ?? template.label }}</span>
         <span class="text-copy-xs text-tertiary select-none">{{ template.description }}</span>
       </div>
       <div class="flex items-center gap-0.5">
@@ -232,38 +234,33 @@ function isUniformVisible(def: LayerUniformDef): boolean {
             <template v-for="def in template.uniforms" :key="def.name">
               <template v-if="isUniformVisible(def)">
               <!-- Float / Int -->
-              <ContextMenuRoot v-if="def.type === 'float' || def.type === 'int'">
-                <ContextMenuTrigger as-child>
-                  <div
-                    @pointerup="draggingLfoId && emit('assign-lfo', def.name)"
-                  >
-                    <UiSliderField
-                      :model-value="getFloat(def, layer.values)"
-                      :label="def.label"
-                      :min="def.min"
-                      :max="def.max"
-                      :step="def.step ?? (def.type === 'int' ? 1 : 0.01)"
-                      :mod-color="getModInfo(def)?.color"
-                      :mod-depth="getModInfo(def)?.depth"
-                      :mod-live-value="getLiveValue(def)"
-                      :is-drop-target="draggingLfoId !== null"
-                      @update:model-value="setFloat(def, layer.values, $event)"
-                      @update:mod-depth="onDepthUpdate(def, $event)"
-                    />
-                  </div>
-                </ContextMenuTrigger>
-                <ContextMenuPortal v-if="getAssignment(def.name)">
-                  <ContextMenuContent class="z-[9999] min-w-36 rounded-xl border border-edge bg-base-1 p-1 shadow-2xl backdrop-blur-xl">
-                    <ContextMenuItem
-                      class="flex cursor-default items-center gap-2 rounded-md px-2.5 py-1.5 text-copy-sm text-primary select-none hover:bg-surface-1 focus:bg-surface-1 focus:outline-0"
-                      @click="emit('remove-assignment', getAssignment(def.name)!.sourceId, def.name)"
-                    >
+              <UiContextMenu v-if="def.type === 'float' || def.type === 'int'">
+                <div @pointerup="draggingLfoId && emit('assign-lfo', def.name)">
+                  <UiSliderField
+                    :model-value="getFloat(def, layer.values)"
+                    :label="def.label"
+                    :min="def.min"
+                    :max="def.max"
+                    :step="def.step ?? (def.type === 'int' ? 1 : 0.01)"
+                    :mod-color="getModInfo(def)?.color"
+                    :mod-depth="getModInfo(def)?.depth"
+                    :mod-live-value="getLiveValue(def)"
+                    :is-drop-target="draggingLfoId !== null"
+                    @update:model-value="setFloat(def, layer.values, $event)"
+                    @update:mod-depth="onDepthUpdate(def, $event)"
+                  />
+                </div>
+                <template #menu>
+                  <UiContextMenuItem @click="resetUniform(def)">Reset to default</UiContextMenuItem>
+                  <template v-if="getAssignment(def.name)">
+                    <UiContextMenuSeparator />
+                    <UiContextMenuItem @click="emit('remove-assignment', getAssignment(def.name)!.sourceId, def.name)">
                       <span class="size-2 rounded-full" :style="{ backgroundColor: getLfoColor(getAssignment(def.name)!.sourceId) }" />
                       Remove {{ lfos.find(l => l.id === getAssignment(def.name)!.sourceId)?.label }}
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenuPortal>
-              </ContextMenuRoot>
+                    </UiContextMenuItem>
+                  </template>
+                </template>
+              </UiContextMenu>
               <!-- Color -->
               <UiColorField
                 v-else-if="def.type === 'color'"

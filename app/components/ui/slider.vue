@@ -38,6 +38,7 @@ function onPointerDown(e: PointerEvent) {
 </script>
 
 <template>
+  <div @pointerdown.capture="onPointerDown">
   <SliderRoot
     :model-value="[model]"
     :min="min"
@@ -46,19 +47,17 @@ function onPointerDown(e: PointerEvent) {
     :disabled="disabled"
     :name="name"
     as="div"
-    class="relative"
+    class="relative outline-none"
     @update:model-value="(val?: number[]) => (model = val?.[0] ?? model)"
-    @pointerdown="onPointerDown"
     @pointerup="isDragging = false"
     @pointercancel="isDragging = false"
   >
     <SliderTrack
       as="div"
       :class="[
-        'group relative h-7 rounded bg-surface-1 p-px transition-shadow duration-150 ease-out-expo',
+        'group relative h-7 rounded bg-surface-1 p-px outline-none transition-shadow duration-150 ease-out-expo',
         disabled ? 'cursor-not-allowed opacity-50' : 'cursor-ew-resize',
-        'has-focus-visible:ring-2 has-focus-visible:ring-focus-subtle',
-        isDropTarget && 'ring-2 ring-focus-subtle',
+        isDropTarget && 'ring-1 ring-focus-subtle hover:ring-2 hover:ring-accent',
       ]"
       :style="{ '--slider-percentage': percentage, '--thumb-width': `${thumbWidthPx}px` } as any"
     >
@@ -87,4 +86,5 @@ function onPointerDown(e: PointerEvent) {
       <SliderThumb class="size-0 focus:outline-none focus-visible:outline-none" />
     </SliderTrack>
   </SliderRoot>
+  </div>
 </template>

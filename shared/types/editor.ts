@@ -31,6 +31,7 @@ export type LayerTemplate = {
 export type LayerInstance = {
   id: string;
   type: LayerType;
+  name?: string;
   enabled: boolean;
   values: Record<string, unknown>;
 };

@@ -44,6 +44,7 @@ const open = ref(false);
           side="bottom"
           align="start"
           :side-offset="4"
+          :collision-padding="12"
           class="z-[9999] w-[var(--reka-select-trigger-width)] rounded-xl border border-edge bg-base-1 shadow-2xl backdrop-blur-xl"
         >
           <SelectViewport class="max-h-48 overflow-auto p-1">
