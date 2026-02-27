@@ -31,5 +31,20 @@ export default defineNuxtConfig({
       ],
     },
   },
-  modules: ["@nuxt/fonts"],
+  modules: ["@nuxt/fonts", "nuxt-auth-utils"],
+  runtimeConfig: {
+    oauth: {
+      google: {
+        clientId: "",
+        clientSecret: "",
+      },
+    },
+    aws: {
+      region: "us-east-1",
+      accessKeyId: "",
+      secretAccessKey: "",
+      s3Bucket: "shader-lab",
+      s3Endpoint: "",
+    },
+  },
 });

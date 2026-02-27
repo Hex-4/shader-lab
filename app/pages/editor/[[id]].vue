@@ -7,61 +7,61 @@ import type { GradientStop } from "#shared/types";
 
 useHead({ title: "Editor — Shader Lab" });
 
+const route = useRoute();
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
-// --- Layer state ---
+// --- Default composition ---
 
-const layers = ref<LayerInstance[]>([
-  {
-    id: "vignette-1",
-    type: "vignette",
-    enabled: true,
-    values: { shape: 0, vignetteIntensity: 1.0, vignetteRadius: 0.4, vignetteSoftness: 0.4 },
-  },
-  {
-    id: "dither-1",
-    type: "dither",
-    enabled: true,
-    values: { levels: 16, ditherScale: 4 },
-  },
-  {
-    id: "grain-1",
-    type: "grain",
-    enabled: true,
-    values: { grainIntensity: 0.02, ditherScale: 4.0, speed: 50.0 },
-  },
-  {
-    id: "distortion-2",
-    type: "distortion",
-    enabled: true,
-    values: { waveType: 0, freq: 1.9, amplitude: 0.4, sharpness: 1, pulseWidth: 0, skew: 0, direction: 0 },
-  },
-  {
-    id: "distortion-1",
-    type: "distortion",
-    enabled: true,
-    values: { waveType: 1, freq: 3, amplitude: 0.51, sharpness: 6.7, pulseWidth: 0.04, skew: 0, direction: 315 },
-  },
-  {
-    id: "gradient-1",
-    type: "gradient",
-    enabled: true,
-    values: {
-      u_gradient: [
-        { color: "#000000", position: 0 },
-        { color: "#330d03", position: 0.15 },
-        { color: "#f35a0d", position: 0.35 },
-        { color: "#fff2d9", position: 0.6 },
-        { color: "#0f3839", position: 0.85 },
-        { color: "#000000", position: 1.0 },
-      ],
-      angle: 90,
-      offsetX: 0,
-    },
-  },
-]);
+const defaultLayers: LayerInstance[] = [
+  { id: "vignette-1", type: "vignette", enabled: true, values: { shape: 0, vignetteIntensity: 1.0, vignetteRadius: 0.4, vignetteSoftness: 0.4 } },
+  { id: "dither-1", type: "dither", enabled: true, values: { levels: 16, ditherScale: 4 } },
+  { id: "grain-1", type: "grain", enabled: true, values: { grainIntensity: 0.02, ditherScale: 4.0, speed: 50.0 } },
+  { id: "distortion-2", type: "distortion", enabled: true, values: { waveType: 0, freq: 1.9, amplitude: 0.4, sharpness: 1, pulseWidth: 0, skew: 0, direction: 0 } },
+  { id: "distortion-1", type: "distortion", enabled: true, values: { waveType: 1, freq: 3, amplitude: 0.51, sharpness: 6.7, pulseWidth: 0.04, skew: 0, direction: 315 } },
+  { id: "gradient-1", type: "gradient", enabled: true, values: { u_gradient: [{ color: "#000000", position: 0 }, { color: "#330d03", position: 0.15 }, { color: "#f35a0d", position: 0.35 }, { color: "#fff2d9", position: 0.6 }, { color: "#0f3839", position: 0.85 }, { color: "#000000", position: 1.0 }], angle: 90, offsetX: 0 } },
+];
 
-const selectedLayerId = ref<string | null>("distortion-1");
+const defaultLfos: LFOSource[] = [
+  { id: "lfo-1", label: "Drift", color: LFO_COLORS[0]!, points: clonePresetPoints("sine"), rate: 0.1, phase: 0, mode: "loop" },
+  { id: "lfo-2", label: "Pulse", color: LFO_COLORS[1]!, points: clonePresetPoints("sine"), rate: 0.13, phase: 0, mode: "loop" },
+];
+
+const defaultAssignments: ModulationAssignment[] = [
+  { sourceId: "lfo-1", layerId: "distortion-1", paramName: "direction", depth: 90 },
+  { sourceId: "lfo-1", layerId: "gradient-1", paramName: "offsetX", depth: 0.5 },
+  { sourceId: "lfo-2", layerId: "distortion-1", paramName: "amplitude", depth: 0.4 },
+  { sourceId: "lfo-2", layerId: "distortion-1", paramName: "pulseWidth", depth: 0.25 },
+];
+
+// --- Load composition from server if ID is in the route ---
+
+const compositionId = ref<string | null>(null);
+const compositionName = ref("Untitled");
+const layers = ref<LayerInstance[]>(defaultLayers);
+const lfos = ref<LFOSource[]>(defaultLfos);
+const assignments = ref<ModulationAssignment[]>(defaultAssignments);
+
+const routeId = route.params.id as string | undefined;
+
+if (routeId) {
+  const { data } = await useFetch(`/api/compositions/${routeId}`);
+  if (data.value) {
+    const comp = data.value as {
+      id: string;
+      name: string;
+      data: { layers: LayerInstance[]; lfos: LFOSource[]; assignments: ModulationAssignment[] };
+    };
+    compositionId.value = comp.id;
+    compositionName.value = comp.name;
+    layers.value = comp.data.layers;
+    lfos.value = comp.data.lfos;
+    assignments.value = comp.data.assignments;
+  }
+}
+
+// --- Selection state ---
+
+const selectedLayerId = ref<string | null>(layers.value[layers.value.length - 2]?.id ?? null);
 
 const selectedLayer = computed(() => {
   if (!selectedLayerId.value) return null;
@@ -73,19 +73,7 @@ const selectedTemplate = computed(() => {
   return LAYER_TEMPLATES[selectedLayer.value.type] ?? null;
 });
 
-// --- LFO Modulation ---
-
-const lfos = ref<LFOSource[]>([
-  { id: "lfo-1", label: "Drift", color: LFO_COLORS[0]!, points: clonePresetPoints("sine"), rate: 0.1, phase: 0, mode: "loop" },
-  { id: "lfo-2", label: "Pulse", color: LFO_COLORS[1]!, points: clonePresetPoints("sine"), rate: 0.13, phase: 0, mode: "loop" },
-]);
-
-const assignments = ref<ModulationAssignment[]>([
-  { sourceId: "lfo-1", layerId: "distortion-1", paramName: "direction", depth: 90 },
-  { sourceId: "lfo-1", layerId: "gradient-1", paramName: "offsetX", depth: 0.5 },
-  { sourceId: "lfo-2", layerId: "distortion-1", paramName: "amplitude", depth: 0.4 },
-  { sourceId: "lfo-2", layerId: "distortion-1", paramName: "pulseWidth", depth: 0.25 },
-]);
+// --- LFO state ---
 
 const selectedLfoId = ref<string | null>(null);
 const draggingLfoId = ref<string | null>(null);
@@ -101,10 +89,8 @@ const { lfoValues, lfoPhases, getModulatedValue } = useModulationEngine(lfos, as
 
 const modFn = computed(() => getModulatedValue);
 
-// Provide lfoValues for live indicators on sliders
 provide("lfoValues", lfoValues);
 
-// Cursor position for the selected LFO's wave editor
 const selectedLfoCursorPosition = computed(() => {
   if (!selectedLfoId.value) return undefined;
   return lfoPhases.value[selectedLfoId.value];
@@ -113,7 +99,18 @@ const selectedLfoCursorPosition = computed(() => {
 // --- Layer Compiler + Renderer ---
 
 const { passes } = useLayerCompiler(layers, modFn);
-useMultiPassRenderer(canvasRef, passes);
+const { getCanvas } = useMultiPassRenderer(canvasRef, passes);
+
+// --- Auto-Save ---
+
+const compositionData = computed(() => ({
+  version: 1 as const,
+  layers: layers.value,
+  lfos: lfos.value,
+  assignments: assignments.value,
+}));
+
+useAutoSave(compositionId, compositionName, compositionData, getCanvas);
 
 // --- Layer Management ---
 
@@ -194,11 +191,9 @@ function clearLfoAssignments(id: string) {
 
 function assignLfo(paramName: string) {
   if (!draggingLfoId.value || !selectedLayer.value) return;
-  // Remove existing assignment for this param on this layer (only one LFO per param)
   assignments.value = assignments.value.filter(
     (a) => !(a.layerId === selectedLayer.value!.id && a.paramName === paramName),
   );
-  // Find the param's range to set a reasonable default depth
   const template = selectedTemplate.value;
   const def = template?.uniforms.find((u) => u.name === paramName);
   const range = ((def?.max ?? 1) - (def?.min ?? 0)) * 0.15;
@@ -258,7 +253,7 @@ function onDragStart(lfoId: string, x: number, y: number) {
   window.addEventListener("pointerup", onUp);
 }
 
-// --- Layer settings assignments for selected layer ---
+// --- Selected layer assignments ---
 
 const selectedLayerAssignments = computed(() => {
   if (!selectedLayer.value) return [];
@@ -272,6 +267,15 @@ const selectedLayerAssignments = computed(() => {
       ref="canvasRef"
       class="fixed inset-0 size-full"
     />
+
+    <!-- Top bar -->
+    <div class="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-edge bg-base-1/80 px-3 py-1.5 shadow-2xl backdrop-blur-xl">
+      <NuxtLink to="/" class="text-copy-sm text-tertiary transition-colors duration-150 hover:text-primary">
+        Shader Lab
+      </NuxtLink>
+      <div class="h-4 w-px bg-surface-1" />
+      <UiEditableText v-model="compositionName" fill class="text-copy-sm text-secondary" />
+    </div>
 
     <!-- Layer Stack Panel (left) -->
     <EditorLayerStack

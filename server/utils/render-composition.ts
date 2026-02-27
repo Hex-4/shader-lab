@@ -1,0 +1,430 @@
+import { createCanvas } from "@napi-rs/canvas";
+import type { LayerInstance, LFOSource, ModulationAssignment, RenderPass, LayerType, WavePoint } from "#shared/types/editor";
+import type { GradientStop } from "#shared/types";
+import LAYER_TEMPLATES from "#shared/editor/layer-templates";
+
+// Import shader sources as strings — these are bundled by vite-plugin-glsl on the server via rollup
+import gradientFrag from "#shared/shaders/layers/gradient.frag";
+import solidFrag from "#shared/shaders/layers/solid.frag";
+import noiseFrag from "#shared/shaders/layers/noise.frag";
+import distortionFrag from "#shared/shaders/layers/distortion.frag";
+import ditherFrag from "#shared/shaders/layers/dither.frag";
+import grainFrag from "#shared/shaders/layers/grain.frag";
+import vignetteFrag from "#shared/shaders/layers/vignette.frag";
+import outputFrag from "#shared/shaders/layers/output.frag";
+
+const FRAG_SHADERS: Record<LayerType, string> = {
+  gradient: gradientFrag,
+  solid: solidFrag,
+  noise: noiseFrag,
+  distortion: distortionFrag,
+  dither: ditherFrag,
+  grain: grainFrag,
+  vignette: vignetteFrag,
+};
+
+const RAW_VERT = `
+attribute vec2 aPosition;
+attribute vec2 aUV;
+varying vec2 vUv;
+void main() {
+  vUv = aUV;
+  gl_Position = vec4(aPosition, 0.0, 1.0);
+}
+`;
+
+const GRADIENT_RESOLUTION = 256;
+
+// --- Schlick bias + wave evaluation (duplicated from modulation engine for server use) ---
+
+function schlickBias(t: number, b: number): number {
+  t = Math.max(0, Math.min(1, t));
+  b = Math.max(0.001, Math.min(0.999, b));
+  return t / ((1 / b - 2) * (1 - t) + 1);
+}
+
+function curveToB(curve: number): number {
+  return 1 / (1 + Math.exp(curve * 3));
+}
+
+function effectiveCurve(p1y: number, p2y: number, curve: number): number {
+  return p2y >= p1y ? curve : -curve;
+}
+
+function evaluateWavePoints(points: WavePoint[], t: number): number {
+  if (points.length === 0) return 0.5;
+  if (points.length === 1) return points[0]!.y;
+  t = Math.max(0, Math.min(1, t));
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i]!;
+    const p2 = points[i + 1]!;
+    if (t >= p1.x && (t <= p2.x || i === points.length - 2)) {
+      const segLen = p2.x - p1.x;
+      if (segLen < 0.0001) return p2.y;
+      const segT = (t - p1.x) / segLen;
+      const eff = effectiveCurve(p1.y, p2.y, p1.curve);
+      const b = curveToB(eff);
+      const curvedT = schlickBias(segT, b);
+      return p1.y + (p2.y - p1.y) * curvedT;
+    }
+  }
+  return points[points.length - 1]!.y;
+}
+
+// --- Compile passes (server-side, no Vue) ---
+
+function compilePasses(layers: LayerInstance[], modFn: ((lid: string, pn: string, bv: number) => number) | null): RenderPass[] {
+  const enabled = [...layers].reverse().filter((l) => l.enabled);
+  if (enabled.length === 0) return [];
+  const result: RenderPass[] = [];
+  let previousLayerId: string | null = null;
+  for (let i = 0; i < enabled.length; i++) {
+    const layer = enabled[i]!;
+    const template = LAYER_TEMPLATES[layer.type];
+    if (!template) continue;
+    const isLast = i === enabled.length - 1;
+    const isGenerator = template.category === "generator";
+    const uniforms: Record<string, unknown> = {};
+    for (const def of template.uniforms) {
+      let value = layer.values[def.name] ?? def.default;
+      if (modFn && typeof value === "number") value = modFn(layer.id, def.name, value);
+      uniforms[def.name] = value;
+    }
+    result.push({ layerId: layer.id, layerType: layer.type, uniforms, inputLayerId: isGenerator ? null : previousLayerId, isOutput: isLast });
+    previousLayerId = layer.id;
+  }
+  return result;
+}
+
+// --- Gradient texture creation ---
+
+function createGradientData(stops: GradientStop[]): Uint8Array {
+  const canvas = createCanvas(GRADIENT_RESOLUTION, 1);
+  const ctx = canvas.getContext("2d");
+  const sorted = [...stops].sort((a, b) => a.position - b.position);
+  const gradient = ctx.createLinearGradient(0, 0, GRADIENT_RESOLUTION, 0);
+  for (const stop of sorted) {
+    gradient.addColorStop(Math.max(0, Math.min(1, stop.position)), stop.color);
+  }
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, GRADIENT_RESOLUTION, 1);
+  const imageData = ctx.getImageData(0, 0, GRADIENT_RESOLUTION, 1);
+  return new Uint8Array(imageData.data);
+}
+
+function hexToRGB(hex: string): [number, number, number] {
+  hex = hex.replace("#", "");
+  return [
+    parseInt(hex.substring(0, 2), 16) / 255,
+    parseInt(hex.substring(2, 4), 16) / 255,
+    parseInt(hex.substring(4, 6), 16) / 255,
+  ];
+}
+
+// --- Raw WebGL helpers ---
+
+function compileShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader | null {
+  const shader = gl.createShader(type);
+  if (!shader) return null;
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error("Shader compile error:", gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
+  }
+  return shader;
+}
+
+function createProgram(gl: WebGLRenderingContext, vertSrc: string, fragSrc: string): WebGLProgram | null {
+  const vert = compileShader(gl, gl.VERTEX_SHADER, vertSrc);
+  const frag = compileShader(gl, gl.FRAGMENT_SHADER, fragSrc);
+  if (!vert || !frag) return null;
+  const program = gl.createProgram();
+  if (!program) return null;
+  gl.attachShader(program, vert);
+  gl.attachShader(program, frag);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error("Program link error:", gl.getProgramInfoLog(program));
+    gl.deleteProgram(program);
+    return null;
+  }
+  return program;
+}
+
+function createFullscreenQuad(gl: WebGLRenderingContext, program: WebGLProgram) {
+  // Two triangles covering [-1, 1] with UVs [0, 1]
+  const vertices = new Float32Array([
+    -1, -1, 0, 0,
+     1, -1, 1, 0,
+    -1,  1, 0, 1,
+    -1,  1, 0, 1,
+     1, -1, 1, 0,
+     1,  1, 1, 1,
+  ]);
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+  const posLoc = gl.getAttribLocation(program, "aPosition");
+  const uvLoc = gl.getAttribLocation(program, "aUV");
+  gl.enableVertexAttribArray(posLoc);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 16, 0);
+  if (uvLoc >= 0) {
+    gl.enableVertexAttribArray(uvLoc);
+    gl.vertexAttribPointer(uvLoc, 2, gl.FLOAT, false, 16, 8);
+  }
+
+  return buffer;
+}
+
+function createFBO(gl: WebGLRenderingContext, width: number, height: number) {
+  const framebuffer = gl.createFramebuffer()!;
+  const texture = gl.createTexture()!;
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  return { framebuffer, texture };
+}
+
+// --- Set uniforms for a render pass ---
+
+function setPassUniforms(
+  gl: WebGLRenderingContext,
+  program: WebGLProgram,
+  pass: RenderPass,
+  width: number,
+  height: number,
+  time: number,
+  inputTexture: WebGLTexture | null,
+  gradientTextures: Map<string, WebGLTexture>,
+) {
+  let texUnit = 0;
+
+  // Global uniforms
+  const uRes = gl.getUniformLocation(program, "u_resolution");
+  if (uRes) gl.uniform2f(uRes, width, height);
+
+  const uTime = gl.getUniformLocation(program, "u_time");
+  if (uTime) gl.uniform1f(uTime, time);
+
+  const uScale = gl.getUniformLocation(program, "u_scale");
+  if (uScale) gl.uniform1f(uScale, 1.0);
+
+  // Input texture from previous pass
+  if (inputTexture) {
+    const uInput = gl.getUniformLocation(program, "u_input");
+    if (uInput) {
+      gl.activeTexture(gl.TEXTURE0 + texUnit);
+      gl.bindTexture(gl.TEXTURE_2D, inputTexture);
+      gl.uniform1i(uInput, texUnit);
+      texUnit++;
+    }
+  }
+
+  // Pass-specific uniforms
+  for (const [name, value] of Object.entries(pass.uniforms)) {
+    const loc = gl.getUniformLocation(program, name);
+    if (!loc) continue;
+
+    if (typeof value === "number") {
+      // Check if it's an int uniform (waveType, shape, etc.)
+      if (name === "waveType" || name === "shape") {
+        gl.uniform1i(loc, value);
+      } else {
+        gl.uniform1f(loc, value);
+      }
+    } else if (typeof value === "boolean") {
+      gl.uniform1i(loc, value ? 1 : 0);
+    } else if (typeof value === "string") {
+      // Color hex
+      const [r, g, b] = hexToRGB(value);
+      gl.uniform3f(loc, r, g, b);
+    } else if (Array.isArray(value)) {
+      if (value.length === 2 && typeof value[0] === "number") {
+        // vec2
+        gl.uniform2f(loc, value[0], value[1] as number);
+      } else if (value.length > 0 && typeof value[0] === "object" && "color" in value[0]) {
+        // Gradient stops
+        const stops = value as GradientStop[];
+        const key = `${pass.layerId}_${name}`;
+        let tex = gradientTextures.get(key);
+        if (!tex) {
+          const data = createGradientData(stops);
+          tex = gl.createTexture()!;
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GRADIENT_RESOLUTION, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gradientTextures.set(key, tex);
+        }
+        gl.activeTexture(gl.TEXTURE0 + texUnit);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.uniform1i(loc, texUnit);
+        texUnit++;
+      }
+    }
+  }
+}
+
+// --- Main render function ---
+
+type CompositionConfig = {
+  layers: LayerInstance[];
+  lfos: LFOSource[];
+  assignments: ModulationAssignment[];
+};
+
+export async function renderComposition(
+  config: CompositionConfig,
+  options: { width?: number; height?: number; time?: number } = {},
+): Promise<Buffer | null> {
+  const width = options.width ?? 400;
+  const height = options.height ?? 300;
+  const time = options.time ?? 2.0;
+
+  // Lazy-import gl (native module)
+  let createGL: any;
+  try {
+    // Try direct import first (works in dev)
+    createGL = (await import("gl")).default;
+  } catch {
+    try {
+      // Fallback for production build
+      const { createRequire } = await import("module");
+      const { join } = await import("path");
+      const serverPkg = join(process.cwd(), ".output", "server", "package.json");
+      const require = createRequire(serverPkg);
+      createGL = require("gl");
+    } catch (e) {
+      console.error("Failed to import gl:", e);
+      return null;
+    }
+  }
+
+  // Evaluate LFOs at the given time to get modulated values
+  function getModulatedValue(layerId: string, paramName: string, baseValue: number): number {
+    const assignment = config.assignments.find(
+      (a) => a.layerId === layerId && a.paramName === paramName,
+    );
+    if (!assignment) return baseValue;
+    const lfo = config.lfos.find((l) => l.id === assignment.sourceId);
+    if (!lfo) return baseValue;
+    const phaseOffset = lfo.phase / 360;
+    const rawT = lfo.mode === "pingpong"
+      ? (time * lfo.rate + phaseOffset) % 2
+      : (time * lfo.rate + phaseOffset) % 1;
+    const t = lfo.mode === "pingpong" && rawT > 1 ? 2 - rawT : rawT;
+    const lfoValue = evaluateWavePoints(lfo.points, Math.max(0, Math.min(1, t)));
+    return baseValue + lfoValue * assignment.depth;
+  }
+
+  // Compile render passes
+  const passes = compilePasses(config.layers, getModulatedValue);
+  if (passes.length === 0) return null;
+
+  // Create headless GL context
+  const gl = createGL(width, height, { preserveDrawingBuffer: true });
+  if (!gl) return null;
+
+  try {
+    gl.viewport(0, 0, width, height);
+
+    // Compile shader programs for each unique layer type
+    const programs = new Map<LayerType, WebGLProgram>();
+    for (const pass of passes) {
+      if (programs.has(pass.layerType)) continue;
+      const fragSrc = FRAG_SHADERS[pass.layerType];
+      if (!fragSrc) continue;
+      const program = createProgram(gl, RAW_VERT, fragSrc);
+      if (program) programs.set(pass.layerType, program);
+    }
+
+    // Create FBOs for each pass (except the last which renders to screen)
+    const fbos = new Map<string, { framebuffer: WebGLFramebuffer; texture: WebGLTexture }>();
+    for (const pass of passes) {
+      if (!pass.isOutput) {
+        fbos.set(pass.layerId, createFBO(gl, width, height));
+      }
+    }
+
+    const gradientTextures = new Map<string, WebGLTexture>();
+
+    // Render each pass
+    for (const pass of passes) {
+      const program = programs.get(pass.layerType);
+      if (!program) continue;
+
+      gl.useProgram(program);
+
+      // Set up quad geometry for this program
+      const quadBuffer = createFullscreenQuad(gl, program);
+
+      // Bind output FBO (or null for screen)
+      if (pass.isOutput) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      } else {
+        const fbo = fbos.get(pass.layerId);
+        if (fbo) gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.framebuffer);
+      }
+
+      // Get input texture from previous pass
+      let inputTexture: WebGLTexture | null = null;
+      if (pass.inputLayerId) {
+        const inputFbo = fbos.get(pass.inputLayerId);
+        if (inputFbo) inputTexture = inputFbo.texture;
+      }
+
+      // Set uniforms and draw
+      setPassUniforms(gl, program, pass, width, height, time, inputTexture, gradientTextures);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      // Clean up quad buffer
+      gl.deleteBuffer(quadBuffer);
+    }
+
+    // Read pixels
+    const pixels = new Uint8Array(width * height * 4);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+    // Clean up GL resources
+    for (const [, program] of programs) gl.deleteProgram(program);
+    for (const [, fbo] of fbos) {
+      gl.deleteFramebuffer(fbo.framebuffer);
+      gl.deleteTexture(fbo.texture);
+    }
+    for (const [, tex] of gradientTextures) gl.deleteTexture(tex);
+    try { gl.getExtension("STACKGL_destroy_context")?.destroy(); } catch {}
+
+    // Convert pixels to PNG using @napi-rs/canvas
+    // Note: WebGL readPixels gives bottom-up rows, need to flip vertically
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d");
+    const imageData = ctx.createImageData(width, height);
+
+    for (let y = 0; y < height; y++) {
+      const srcRow = (height - 1 - y) * width * 4; // flip Y
+      const dstRow = y * width * 4;
+      for (let x = 0; x < width * 4; x++) {
+        imageData.data[dstRow + x] = pixels[srcRow + x]!;
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas.toBuffer("image/png");
+  } catch (e) {
+    console.error("Composition render failed:", e);
+    try { gl.getExtension("STACKGL_destroy_context")?.destroy(); } catch {}
+    return null;
+  }
+}

@@ -19,7 +19,7 @@ const { variant = "toolbar", size = "md", active = false } = defineProps<Props>(
 const slots = useSlots();
 
 const classes = computed(() => {
-  const base = "flex items-center justify-center font-medium transition-colors";
+  const base = "flex items-center justify-center font-medium leading-none transition-colors";
 
   const variantClasses: Record<Variant, string> = {
     toolbar: "rounded-xl border border-edge bg-base-1 text-secondary shadow-lg backdrop-blur-xl hover:bg-surface-1 hover:text-primary",
@@ -46,8 +46,8 @@ const classes = computed(() => {
 
 <template>
   <button v-bind="$attrs" :class="classes">
-    <component v-if="iconLeft" :is="iconLeft" :class="size === 'sm' ? 'size-3.5' : 'size-4'" />
+    <component v-if="iconLeft" :is="iconLeft" :class="size === 'sm' ? 'size-3.5 shrink-0' : 'size-4 shrink-0'" />
     <slot />
-    <component v-if="iconRight" :is="iconRight" :class="size === 'sm' ? 'size-3.5' : 'size-4'" />
+    <component v-if="iconRight" :is="iconRight" :class="size === 'sm' ? 'size-3.5 shrink-0' : 'size-4 shrink-0'" />
   </button>
 </template>

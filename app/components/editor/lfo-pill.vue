@@ -58,7 +58,7 @@ const label = computed({
 <template>
   <UiContextMenu>
     <button
-      class="flex h-8 items-center gap-2 rounded-lg border px-2.5 text-copy-xs font-medium transition-all duration-150 select-none"
+      class="flex h-8 items-center gap-2 rounded-lg border px-2.5 text-copy-sm font-medium transition-all duration-150 select-none"
       :class="selected
         ? 'border-edge bg-surface-1 text-primary'
         : 'border-transparent bg-surface-1/50 text-secondary hover:bg-surface-1 hover:text-primary'"

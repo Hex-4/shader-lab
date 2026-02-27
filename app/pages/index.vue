@@ -1,45 +1,75 @@
 <script setup lang="ts">
-import experiments from "#shared/experiments";
+import { PlusIcon } from "lucide-vue-next";
 
 useHead({ title: "Shader Lab" });
 
-useSeoMeta({
-  ogTitle: "Shader Lab",
-  ogDescription: "Shader experiments playground",
-  ogImage: "https://shader.zeitwork.com/og-image.png",
-  twitterCard: "summary_large_image",
-  twitterTitle: "Shader Lab",
-  twitterDescription: "Shader experiments playground",
-  twitterImage: "https://shader.zeitwork.com/og-image.png",
-});
+const { data: compositions, refresh } = await useFetch("/api/compositions");
 
-const experimentList = computed(() =>
-  Object.values(experiments).map((e) => ({
-    id: e.id,
-    name: e.name,
-    description: e.description,
-  })),
-);
+// Thumbnails are captured client-side from the editor and uploaded on save
+
+async function createNew() {
+  navigateTo("/editor");
+}
+
+async function deleteComposition(id: string) {
+  await $fetch(`/api/compositions/${id}`, { method: "DELETE" });
+  await refresh();
+}
+
+async function duplicateComposition(id: string) {
+  const source = compositions.value?.find((c: any) => c.id === id) as any;
+  if (!source) return;
+  await $fetch("/api/compositions", {
+    method: "POST",
+    body: { name: `${source.name} Copy`, data: source.data },
+  });
+  await refresh();
+}
 </script>
 
 <template>
-  <div class="flex min-h-dvh items-center justify-center bg-base-0 p-8">
-    <div class="flex w-full max-w-md flex-col gap-6">
-      <div class="flex flex-col gap-1">
-        <h1 class="text-title-sm text-primary">Shader Lab</h1>
-        <p class="text-copy text-secondary">Experiments</p>
+  <div class="min-h-dvh bg-base-0">
+    <!-- Header -->
+    <header class="flex items-center justify-between border-b border-edge px-6 py-4">
+      <h1 class="text-title-sm font-semibold text-primary select-none">Shader Lab</h1>
+      <div class="flex items-center gap-3">
+        <UiButton variant="action" :icon-left="PlusIcon" @click="createNew">
+          New
+        </UiButton>
+        <DashboardUserMenu />
       </div>
-      <div class="flex flex-col gap-2">
-        <NuxtLink
-          v-for="exp in experimentList"
-          :key="exp.id"
-          :to="`/${exp.id}`"
-          class="group flex flex-col gap-0.5 rounded-xl border border-edge bg-base-1 px-4 py-3 transition-all hover:border-edge-strong hover:bg-surface-1"
-        >
-          <span class="text-copy font-medium text-primary">{{ exp.name }}</span>
-          <span class="text-copy-sm text-tertiary">{{ exp.description }}</span>
-        </NuxtLink>
+    </header>
+
+    <!-- Content -->
+    <main class="mx-auto max-w-5xl px-6 py-8">
+      <!-- Empty state -->
+      <div
+        v-if="!compositions?.length"
+        class="flex flex-col items-center justify-center gap-4 py-24"
+      >
+        <p class="text-copy-sm text-tertiary">No compositions yet.</p>
+        <UiButton variant="action" :icon-left="PlusIcon" @click="createNew">
+          Create your first shader
+        </UiButton>
       </div>
-    </div>
+
+      <!-- Composition grid -->
+      <div
+        v-else
+        class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+      >
+        <DashboardCompositionCard
+          v-for="comp in (compositions as any[])"
+          :key="comp.id"
+          :id="comp.id"
+          :name="comp.name"
+          :thumbnail-url="comp.thumbnailUrl"
+          :updated-at="comp.updatedAt"
+          :data="comp.data"
+          @delete="deleteComposition(comp.id)"
+          @duplicate="duplicateComposition(comp.id)"
+        />
+      </div>
+    </main>
   </div>
 </template>

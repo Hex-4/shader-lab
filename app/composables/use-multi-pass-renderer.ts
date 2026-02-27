@@ -278,15 +278,21 @@ export function useMultiPassRenderer(
 
   function resize() {
     if (!renderer) return;
+    const canvas = canvasRef.value;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width || window.innerWidth;
+    const height = rect.height || window.innerHeight;
 
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(width, height, false);
 
-    const width = renderer.domElement.width;
-    const height = renderer.domElement.height;
+    const rtWidth = renderer.domElement.width;
+    const rtHeight = renderer.domElement.height;
 
     for (const rt of renderTargets.values()) {
-      rt.setSize(width, height);
+      rt.setSize(rtWidth, rtHeight);
     }
   }
 
@@ -302,7 +308,8 @@ export function useMultiPassRenderer(
       preserveDrawingBuffer: true,
     });
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    const rect = canvas.getBoundingClientRect();
+    renderer.setSize(rect.width || window.innerWidth, rect.height || window.innerHeight, false);
 
     scene = new THREE.Scene();
     camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -359,6 +366,8 @@ export function useMultiPassRenderer(
   watch(canvasRef, (canvas) => {
     if (canvas && !renderer) {
       init();
+    } else if (!canvas && renderer) {
+      destroy();
     }
   }, { immediate: true });
 
