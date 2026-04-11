@@ -172,16 +172,21 @@ function resetUniform(def: LayerUniformDef) {
   layer.values[def.name] = def.default;
 }
 
-// Distortion layer: conditionally show params based on wave type
+// Distortion layer: conditionally show params based on wave type and coord mode
 const isDistortion = computed(() => layer.type === "distortion");
 const currentWaveType = computed(() => (layer.values.waveType as number) ?? 0);
+const currentCoordMode = computed(() => (layer.values.coordMode as number) ?? 0);
 
 function isUniformVisible(def: LayerUniformDef): boolean {
   if (!isDistortion.value) return true;
   // Sharpness + pulseWidth only for square (1)
   if (def.name === "sharpness" || def.name === "pulseWidth") return currentWaveType.value === 1;
-  // Skew only for triangle (2) and sawtooth (3)
-  if (def.name === "skew") return currentWaveType.value === 2 || currentWaveType.value === 3;
+  // Skew only for triangle (2)
+  if (def.name === "skew") return currentWaveType.value === 2;
+  // Direction only in linear mode (0)
+  if (def.name === "direction") return currentCoordMode.value === 0;
+  // Center X/Y only in radial mode (1)
+  if (def.name === "centerX" || def.name === "centerY") return currentCoordMode.value === 1;
   return true;
 }
 </script>

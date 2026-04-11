@@ -10,10 +10,11 @@ import distortionFrag from "#shared/shaders/layers/distortion.frag";
 import ditherFrag from "#shared/shaders/layers/dither.frag";
 import grainFrag from "#shared/shaders/layers/grain.frag";
 import vignetteFrag from "#shared/shaders/layers/vignette.frag";
+import resolveFrag from "#shared/shaders/layers/resolve.frag";
 import outputFrag from "#shared/shaders/layers/output.frag";
 import fullscreenVert from "#shared/shaders/layers/fullscreen.vert";
 
-const FRAG_SHADERS: Record<LayerType, string> = {
+const FRAG_SHADERS: Record<string, string> = {
   gradient: gradientFrag,
   solid: solidFrag,
   noise: noiseFrag,
@@ -21,6 +22,7 @@ const FRAG_SHADERS: Record<LayerType, string> = {
   dither: ditherFrag,
   grain: grainFrag,
   vignette: vignetteFrag,
+  resolve: resolveFrag,
 };
 
 const GRADIENT_RESOLUTION = 256;
@@ -100,7 +102,7 @@ export function useMultiPassRenderer(
 
   // Track which shader type each material was built for, so we can detect
   // when a layer's type changes and recreate its material.
-  const materialLayerTypes = new Map<string, LayerType>();
+  const materialLayerTypes = new Map<string, string>();
 
   // ── Gradient texture management ─────────────────────────────────
 
@@ -164,11 +166,23 @@ export function useMultiPassRenderer(
       }
     }
 
-    // Single input from previous layer
+    // Single input from previous layer (used as u_input)
     if (pass.inputLayerId) {
       const inputRT = renderTargets.get(pass.inputLayerId);
       if (inputRT) {
         uniforms.u_input = { value: inputRT.texture };
+        // For resolve pass, the input is the displacement map → bind as u_displacement too
+        if (pass.layerType === "resolve") {
+          uniforms.u_displacement = { value: inputRT.texture };
+        }
+      }
+    }
+
+    // For resolve pass: bind the color source texture
+    if (pass.layerType === "resolve" && pass.colorSourceLayerId) {
+      const colorRT = renderTargets.get(pass.colorSourceLayerId);
+      if (colorRT) {
+        uniforms.u_color = { value: colorRT.texture };
       }
     }
 

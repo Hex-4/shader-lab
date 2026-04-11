@@ -34,13 +34,15 @@ export type LayerInstance = {
   name?: string;
   enabled: boolean;
   values: Record<string, unknown>;
+  groupId?: string;  // distortions with same groupId compose via displacement map
 };
 
 export type RenderPass = {
   layerId: string;
-  layerType: LayerType;
+  layerType: LayerType | "resolve";
   uniforms: Record<string, unknown>;
   inputLayerId: string | null;
+  colorSourceLayerId?: string | null;  // for resolve pass: which layer has the color texture
   isOutput: boolean;
 };
 
