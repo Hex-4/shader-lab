@@ -22,9 +22,6 @@ uniform int coordMode;
 uniform float centerX;
 uniform float centerY;
 
-// Output mode: 0=color (sample input), 1=displacement (output UV offset)
-uniform int outputMode;
-
 #define PI 3.14159265359
 #define TAU 6.28318530718
 
@@ -100,26 +97,10 @@ void main() {
   // Displacement vector in centered space
   vec2 displacement = displaceDir * wave * amplitude;
 
-  if (outputMode == 1) {
-    // Displacement map mode: accumulate displacement
-    // Read existing displacement from input (encoded as RG: value * 0.5 + 0.5)
-    // If no input is bound, the alpha will be 0 — treat as zero displacement
-    vec4 inputSample = texture2D(u_input, uv);
-    vec2 existing = inputSample.a > 0.5 ? inputSample.rg * 2.0 - 1.0 : vec2(0.0);
-    vec2 total = existing + displacement;
-
-    // Convert displacement from centered space to UV space for storage
-    vec2 uvDisplacement = total;
-    uvDisplacement.x /= aspect;
-
-    // Encode: map to [0, 1] range for 8-bit storage
-    gl_FragColor = vec4(uvDisplacement * 0.5 + 0.5, 0.0, 1.0);
-  } else {
-    // Color mode: sample input at displaced position
-    vec2 displaced = centered + displacement;
-    vec2 sampleUV = displaced;
-    sampleUV.x /= aspect;
-    sampleUV = sampleUV * 0.5 + 0.5;
-    gl_FragColor = texture2D(u_input, sampleUV);
-  }
+  // Displacement map: accumulate UV offsets (layer stack resolves color separately)
+  vec4 inputSample = texture2D(u_input, uv);
+  vec2 existing = inputSample.a > 0.5 ? inputSample.rg * 2.0 - 1.0 : vec2(0.0);
+  vec2 uvOffset = vec2(displacement.x / (2.0 * aspect), displacement.y / 2.0);
+  vec2 total = existing + uvOffset;
+  gl_FragColor = vec4(total * 0.5 + 0.5, 1.0, 1.0);
 }

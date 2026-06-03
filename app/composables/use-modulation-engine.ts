@@ -1,4 +1,5 @@
 import type { LFOSource, ModulationAssignment, WavePoint } from "#shared/types/editor";
+import { applyModulation } from "#shared/editor/modulation";
 
 /**
  * Schlick bias: attempt with attempt with
@@ -134,7 +135,7 @@ export function useModulationEngine(
     if (!assignment) return baseValue;
 
     const lfoValue = lfoValues.value[assignment.sourceId] ?? 0;
-    return baseValue + lfoValue * assignment.depth;
+    return applyModulation(baseValue, paramName, lfoValue, assignment.depth);
   }
 
   onMounted(() => {

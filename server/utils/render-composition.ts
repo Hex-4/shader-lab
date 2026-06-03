@@ -1,7 +1,8 @@
 import { createCanvas } from "@napi-rs/canvas";
 import type { LayerInstance, LFOSource, ModulationAssignment, RenderPass, LayerType, WavePoint } from "#shared/types/editor";
 import type { GradientStop } from "#shared/types";
-import LAYER_TEMPLATES from "#shared/editor/layer-templates";
+import { compilePasses } from "#shared/editor/compile-passes";
+import { applyModulation } from "#shared/editor/modulation";
 
 // Import shader sources as strings — these are bundled by vite-plugin-glsl on the server via rollup
 import gradientFrag from "#shared/shaders/layers/gradient.frag";
@@ -11,9 +12,10 @@ import distortionFrag from "#shared/shaders/layers/distortion.frag";
 import ditherFrag from "#shared/shaders/layers/dither.frag";
 import grainFrag from "#shared/shaders/layers/grain.frag";
 import vignetteFrag from "#shared/shaders/layers/vignette.frag";
+import resolveFrag from "#shared/shaders/layers/resolve.frag";
 import outputFrag from "#shared/shaders/layers/output.frag";
 
-const FRAG_SHADERS: Record<LayerType, string> = {
+const FRAG_SHADERS: Record<LayerType | "resolve", string> = {
   gradient: gradientFrag,
   solid: solidFrag,
   noise: noiseFrag,
@@ -21,6 +23,7 @@ const FRAG_SHADERS: Record<LayerType, string> = {
   dither: ditherFrag,
   grain: grainFrag,
   vignette: vignetteFrag,
+  resolve: resolveFrag,
 };
 
 const RAW_VERT = `
@@ -69,31 +72,6 @@ function evaluateWavePoints(points: WavePoint[], t: number): number {
     }
   }
   return points[points.length - 1]!.y;
-}
-
-// --- Compile passes (server-side, no Vue) ---
-
-function compilePasses(layers: LayerInstance[], modFn: ((lid: string, pn: string, bv: number) => number) | null): RenderPass[] {
-  const enabled = [...layers].reverse().filter((l) => l.enabled);
-  if (enabled.length === 0) return [];
-  const result: RenderPass[] = [];
-  let previousLayerId: string | null = null;
-  for (let i = 0; i < enabled.length; i++) {
-    const layer = enabled[i]!;
-    const template = LAYER_TEMPLATES[layer.type];
-    if (!template) continue;
-    const isLast = i === enabled.length - 1;
-    const isGenerator = template.category === "generator";
-    const uniforms: Record<string, unknown> = {};
-    for (const def of template.uniforms) {
-      let value = layer.values[def.name] ?? def.default;
-      if (modFn && typeof value === "number") value = modFn(layer.id, def.name, value);
-      uniforms[def.name] = value;
-    }
-    result.push({ layerId: layer.id, layerType: layer.type, uniforms, inputLayerId: isGenerator ? null : previousLayerId, isOutput: isLast });
-    previousLayerId = layer.id;
-  }
-  return result;
 }
 
 // --- Gradient texture creation ---
@@ -186,8 +164,8 @@ function createFBO(gl: WebGLRenderingContext, width: number, height: number) {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -197,6 +175,8 @@ function createFBO(gl: WebGLRenderingContext, width: number, height: number) {
 
 // --- Set uniforms for a render pass ---
 
+const INT_UNIFORMS = new Set(["waveType", "shape", "coordMode"]);
+
 function setPassUniforms(
   gl: WebGLRenderingContext,
   program: WebGLProgram,
@@ -205,6 +185,7 @@ function setPassUniforms(
   height: number,
   time: number,
   inputTexture: WebGLTexture | null,
+  colorTexture: WebGLTexture | null,
   gradientTextures: Map<string, WebGLTexture>,
 ) {
   let texUnit = 0;
@@ -228,6 +209,25 @@ function setPassUniforms(
       gl.uniform1i(uInput, texUnit);
       texUnit++;
     }
+    if (pass.layerType === "resolve") {
+      const uDisp = gl.getUniformLocation(program, "u_displacement");
+      if (uDisp) {
+        gl.activeTexture(gl.TEXTURE0 + texUnit);
+        gl.bindTexture(gl.TEXTURE_2D, inputTexture);
+        gl.uniform1i(uDisp, texUnit);
+        texUnit++;
+      }
+    }
+  }
+
+  if (colorTexture) {
+    const uColor = gl.getUniformLocation(program, "u_color");
+    if (uColor) {
+      gl.activeTexture(gl.TEXTURE0 + texUnit);
+      gl.bindTexture(gl.TEXTURE_2D, colorTexture);
+      gl.uniform1i(uColor, texUnit);
+      texUnit++;
+    }
   }
 
   // Pass-specific uniforms
@@ -237,7 +237,7 @@ function setPassUniforms(
 
     if (typeof value === "number") {
       // Check if it's an int uniform (waveType, shape, etc.)
-      if (name === "waveType" || name === "shape") {
+      if (INT_UNIFORMS.has(name)) {
         gl.uniform1i(loc, value);
       } else {
         gl.uniform1f(loc, value);
@@ -326,7 +326,7 @@ export async function renderComposition(
       : (time * lfo.rate + phaseOffset) % 1;
     const t = lfo.mode === "pingpong" && rawT > 1 ? 2 - rawT : rawT;
     const lfoValue = evaluateWavePoints(lfo.points, Math.max(0, Math.min(1, t)));
-    return baseValue + lfoValue * assignment.depth;
+    return applyModulation(baseValue, paramName, lfoValue, assignment.depth);
   }
 
   // Compile render passes
@@ -341,10 +341,10 @@ export async function renderComposition(
     gl.viewport(0, 0, width, height);
 
     // Compile shader programs for each unique layer type
-    const programs = new Map<LayerType, WebGLProgram>();
+    const programs = new Map<RenderPass["layerType"], WebGLProgram>();
     for (const pass of passes) {
       if (programs.has(pass.layerType)) continue;
-      const fragSrc = FRAG_SHADERS[pass.layerType];
+      const fragSrc = FRAG_SHADERS[pass.layerType as LayerType | "resolve"];
       if (!fragSrc) continue;
       const program = createProgram(gl, RAW_VERT, fragSrc);
       if (program) programs.set(pass.layerType, program);
@@ -378,15 +378,19 @@ export async function renderComposition(
         if (fbo) gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.framebuffer);
       }
 
-      // Get input texture from previous pass
       let inputTexture: WebGLTexture | null = null;
       if (pass.inputLayerId) {
         const inputFbo = fbos.get(pass.inputLayerId);
         if (inputFbo) inputTexture = inputFbo.texture;
       }
 
-      // Set uniforms and draw
-      setPassUniforms(gl, program, pass, width, height, time, inputTexture, gradientTextures);
+      let colorTexture: WebGLTexture | null = null;
+      if (pass.colorSourceLayerId) {
+        const colorFbo = fbos.get(pass.colorSourceLayerId);
+        if (colorFbo) colorTexture = colorFbo.texture;
+      }
+
+      setPassUniforms(gl, program, pass, width, height, time, inputTexture, colorTexture, gradientTextures);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
 
       // Clean up quad buffer

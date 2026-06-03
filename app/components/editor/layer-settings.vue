@@ -3,6 +3,7 @@ import { CollapsibleRoot, CollapsibleTrigger, CollapsibleContent } from "reka-ui
 import { ChevronRightIcon, DicesIcon, RotateCcwIcon } from "lucide-vue-next";
 import type { LayerInstance, LayerTemplate, LayerUniformDef, ModulationAssignment, LFOSource } from "#shared/types/editor";
 import type { GradientStop } from "#shared/types";
+import { applyModulation } from "#shared/editor/modulation";
 
 type Props = {
   layer: LayerInstance;
@@ -45,7 +46,7 @@ function getModulatedFloat(paramName: string, fallback: number): number {
   const assignment = getAssignment(paramName);
   if (!assignment) return base;
   const lfoValue = lfoValues.value[assignment.sourceId] ?? 0;
-  return base + lfoValue * assignment.depth;
+  return applyModulation(base, paramName, lfoValue, assignment.depth);
 }
 
 function getModInfo(def: LayerUniformDef): { color: string; depth: number } | null {

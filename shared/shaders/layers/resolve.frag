@@ -9,11 +9,13 @@ uniform sampler2D u_displacement; // accumulated displacement map (RG encoded)
 void main() {
   vec2 uv = gl_FragCoord.xy / u_resolution;
 
-  // Decode displacement: [0, 1] → [-1, 1]
-  vec2 displacement = texture2D(u_displacement, uv).rg * 2.0 - 1.0;
+  vec4 dispSample = texture2D(u_displacement, uv);
+  // Neutral map is (0.5, 0.5); alpha marks a valid displacement pass output
+  vec2 displacement = dispSample.a > 0.5
+    ? dispSample.rg * 2.0 - 1.0
+    : vec2(0.0);
 
-  // Sample the color texture at the displaced position
-  vec2 sampleUV = uv + displacement;
+  vec2 sampleUV = clamp(uv + displacement, 0.0, 1.0);
 
   gl_FragColor = texture2D(u_color, sampleUV);
 }

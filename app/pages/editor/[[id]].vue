@@ -16,8 +16,8 @@ const defaultLayers: LayerInstance[] = [
   { id: "vignette-1", type: "vignette", enabled: true, values: { shape: 0, vignetteIntensity: 1.0, vignetteRadius: 0.4, vignetteSoftness: 0.4 } },
   { id: "dither-1", type: "dither", enabled: true, values: { levels: 16, ditherScale: 4 } },
   { id: "grain-1", type: "grain", enabled: true, values: { grainIntensity: 0.02, ditherScale: 4.0, speed: 50.0 } },
-  { id: "distortion-2", type: "distortion", enabled: true, groupId: "distort-group-1", values: { waveType: 0, freq: 1.9, amplitude: 0.4, sharpness: 1, pulseWidth: 0, skew: 0, direction: 0, coordMode: 0, centerX: 0, centerY: 0 } },
-  { id: "distortion-1", type: "distortion", enabled: true, groupId: "distort-group-1", values: { waveType: 1, freq: 3, amplitude: 0.51, sharpness: 6.7, pulseWidth: 0.04, skew: 0, direction: 315, coordMode: 0, centerX: 0, centerY: 0 } },
+  { id: "distortion-2", type: "distortion", enabled: true, values: { waveType: 0, freq: 1.9, amplitude: 0.4, sharpness: 1, pulseWidth: 0, skew: 0, direction: 0, coordMode: 0, centerX: 0, centerY: 0 } },
+  { id: "distortion-1", type: "distortion", enabled: true, values: { waveType: 1, freq: 3, amplitude: 0.51, sharpness: 6.7, pulseWidth: 0.04, skew: 0, direction: 315, coordMode: 0, centerX: 0, centerY: 0 } },
   { id: "gradient-1", type: "gradient", enabled: true, values: { u_gradient: [{ color: "#000000", position: 0 }, { color: "#330d03", position: 0.15 }, { color: "#f35a0d", position: 0.35 }, { color: "#fff2d9", position: 0.6 }, { color: "#0f3839", position: 0.85 }, { color: "#000000", position: 1.0 }], angle: 90, offsetX: 0 } },
 ];
 
@@ -98,8 +98,11 @@ const selectedLfoCursorPosition = computed(() => {
 
 // --- Layer Compiler + Renderer ---
 
-const { passes } = useLayerCompiler(layers, modFn);
-const { getCanvas } = useMultiPassRenderer(canvasRef, passes);
+const { passes } = useLayerCompiler(layers, modFn, lfos, assignments);
+const { getCanvas } = useMultiPassRenderer(canvasRef, passes, {
+  layers,
+  getModulatedValue: modFn,
+});
 
 // --- Auto-Save ---
 
@@ -130,20 +133,7 @@ function addLayer(type: LayerType) {
     }
   }
 
-  // Auto-assign groupId for distortion layers — join existing group if adjacent distortions exist
-  let groupId: string | undefined;
-  if (type === "distortion") {
-    // Check if the top layer is a distortion with a groupId
-    const topLayer = layers.value[0];
-    if (topLayer?.type === "distortion" && topLayer.groupId) {
-      groupId = topLayer.groupId;
-    } else {
-      // Start a new group
-      groupId = `distort-group-${Date.now()}`;
-    }
-  }
-
-  layers.value.unshift({ id, type, enabled: true, values, groupId });
+  layers.value.unshift({ id, type, enabled: true, values });
   selectedLayerId.value = id;
 }
 
@@ -166,7 +156,6 @@ function duplicateLayer(id: string) {
     type: source.type,
     enabled: source.enabled,
     values: JSON.parse(JSON.stringify(source.values)),
-    groupId: source.groupId,
   };
   const idx = layers.value.findIndex((l) => l.id === id);
   layers.value.splice(idx, 0, clone);

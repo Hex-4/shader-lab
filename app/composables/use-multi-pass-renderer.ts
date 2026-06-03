@@ -1,6 +1,16 @@
 import * as THREE from "three";
-import type { RenderPass, LayerType } from "#shared/types/editor";
+import type { RenderPass, LayerInstance } from "#shared/types/editor";
 import type { GradientStop } from "#shared/types";
+import { buildLayerUniforms, type ModulationFn } from "#shared/editor/compile-passes";
+
+const INT_UNIFORMS = new Set(["waveType", "shape", "coordMode"]);
+
+type RendererOptions = {
+  layers?: Ref<LayerInstance[]>;
+  getModulatedValue?: Ref<ModulationFn | null>;
+  globalSpeed?: Ref<number>;
+  paused?: Ref<boolean>;
+};
 
 // Layer fragment shaders (imported as strings via vite-plugin-glsl)
 import gradientFrag from "#shared/shaders/layers/gradient.frag";
@@ -79,9 +89,12 @@ function updateGradientTexture(
 export function useMultiPassRenderer(
   canvasRef: Ref<HTMLCanvasElement | null>,
   passes: Ref<RenderPass[]> | ComputedRef<RenderPass[]>,
-  globalSpeed: Ref<number> = ref(1),
-  paused: Ref<boolean> = ref(false),
+  options: RendererOptions = {},
 ) {
+  const globalSpeed = options.globalSpeed ?? ref(1);
+  const paused = options.paused ?? ref(false);
+  const layersRef = options.layers;
+  const getModulatedValue = options.getModulatedValue;
   let renderer: THREE.WebGLRenderer | null = null;
   let scene: THREE.Scene | null = null;
   let camera: THREE.OrthographicCamera | null = null;
@@ -103,6 +116,27 @@ export function useMultiPassRenderer(
   // Track which shader type each material was built for, so we can detect
   // when a layer's type changes and recreate its material.
   const materialLayerTypes = new Map<string, string>();
+
+  // Zero displacement encoded as RG=(0.5, 0.5), alpha=1 — bound when distort has no prior map
+  let neutralDisplacementTexture: THREE.DataTexture | null = null;
+
+  function getNeutralDisplacementTexture(): THREE.DataTexture {
+    if (!neutralDisplacementTexture) {
+      const data = new Uint8Array([128, 128, 255, 255]);
+      neutralDisplacementTexture = new THREE.DataTexture(
+        data,
+        1,
+        1,
+        THREE.RGBAFormat,
+      );
+      neutralDisplacementTexture.minFilter = THREE.LinearFilter;
+      neutralDisplacementTexture.magFilter = THREE.LinearFilter;
+      neutralDisplacementTexture.wrapS = THREE.ClampToEdgeWrapping;
+      neutralDisplacementTexture.wrapT = THREE.ClampToEdgeWrapping;
+      neutralDisplacementTexture.needsUpdate = true;
+    }
+    return neutralDisplacementTexture;
+  }
 
   // ── Gradient texture management ─────────────────────────────────
 
@@ -132,6 +166,18 @@ export function useMultiPassRenderer(
     return texture;
   }
 
+  function resolveUniformValues(pass: RenderPass): Record<string, unknown> {
+    if (pass.layerType === "resolve") return {};
+
+    const layer = layersRef?.value.find((l) => l.id === pass.layerId);
+    if (layer) {
+      const modFn = getModulatedValue?.value ?? null;
+      return buildLayerUniforms(layer, modFn);
+    }
+
+    return pass.uniforms;
+  }
+
   // ── Build uniforms for a single pass ────────────────────────────
 
   function buildPassUniforms(
@@ -141,14 +187,15 @@ export function useMultiPassRenderer(
     height: number,
     dpr: number,
   ): Record<string, { value: unknown }> {
+    const uniformValues = resolveUniformValues(pass);
+
     const uniforms: Record<string, { value: unknown }> = {
       u_time: { value: time },
       u_resolution: { value: new THREE.Vector2(width, height) },
       u_scale: { value: dpr },
     };
 
-    // Layer-specific uniforms
-    for (const [key, val] of Object.entries(pass.uniforms)) {
+    for (const [key, val] of Object.entries(uniformValues)) {
       if (key === "u_gradient" && Array.isArray(val)) {
         uniforms[key] = {
           value: getOrUpdateGradientTexture(
@@ -161,24 +208,25 @@ export function useMultiPassRenderer(
         uniforms[key] = { value: new THREE.Color(val) };
       } else if (Array.isArray(val) && val.length === 2) {
         uniforms[key] = { value: new THREE.Vector2(val[0] as number, val[1] as number) };
+      } else if (typeof val === "number" && INT_UNIFORMS.has(key)) {
+        uniforms[key] = { value: Math.round(val) };
       } else {
         uniforms[key] = { value: val };
       }
     }
 
-    // Single input from previous layer (used as u_input)
-    if (pass.inputLayerId) {
+    if (pass.layerType === "distortion" && !pass.inputLayerId) {
+      uniforms.u_input = { value: getNeutralDisplacementTexture() };
+    } else if (pass.inputLayerId) {
       const inputRT = renderTargets.get(pass.inputLayerId);
       if (inputRT) {
         uniforms.u_input = { value: inputRT.texture };
-        // For resolve pass, the input is the displacement map → bind as u_displacement too
         if (pass.layerType === "resolve") {
           uniforms.u_displacement = { value: inputRT.texture };
         }
       }
     }
 
-    // For resolve pass: bind the color source texture
     if (pass.layerType === "resolve" && pass.colorSourceLayerId) {
       const colorRT = renderTargets.get(pass.colorSourceLayerId);
       if (colorRT) {
@@ -219,16 +267,20 @@ export function useMultiPassRenderer(
             minFilter: THREE.LinearFilter,
             magFilter: THREE.LinearFilter,
             format: THREE.RGBAFormat,
-            wrapS: THREE.MirroredRepeatWrapping,
-            wrapT: THREE.MirroredRepeatWrapping,
+            wrapS: THREE.ClampToEdgeWrapping,
+            wrapT: THREE.ClampToEdgeWrapping,
           });
-          rt.texture.wrapS = THREE.MirroredRepeatWrapping;
-          rt.texture.wrapT = THREE.MirroredRepeatWrapping;
+          rt.texture.wrapS = THREE.ClampToEdgeWrapping;
+          rt.texture.wrapT = THREE.ClampToEdgeWrapping;
           renderTargets.set(pass.layerId, rt);
         }
       }
 
       const uniforms = buildPassUniforms(pass, time, width, height, dpr);
+
+      if (pass.layerType === "resolve" && !uniforms.u_color) {
+        continue;
+      }
 
       // Get or create material (recreate if layer type changed)
       let material = materials.get(pass.layerId);
@@ -362,6 +414,9 @@ export function useMultiPassRenderer(
     }
     gradientTextureCache.clear();
 
+    neutralDisplacementTexture?.dispose();
+    neutralDisplacementTexture = null;
+
     // Dispose shared geometry
     geometry?.dispose();
     geometry = null;
@@ -377,6 +432,30 @@ export function useMultiPassRenderer(
 
   // Watch for canvas ref becoming available (needed because <ClientOnly>
   // defers rendering, so the canvas isn't in the DOM at onMounted time)
+  function pruneUnusedPassResources(activePasses: RenderPass[]) {
+    const activeIds = new Set(activePasses.map((p) => p.layerId));
+
+    for (const [id, rt] of renderTargets) {
+      if (!activeIds.has(id)) {
+        rt.dispose();
+        renderTargets.delete(id);
+      }
+    }
+
+    for (const [id, material] of materials) {
+      if (!activeIds.has(id)) {
+        material.dispose();
+        materials.delete(id);
+        materialLayerTypes.delete(id);
+      }
+    }
+  }
+
+  watch(
+    () => passes.value.map((p) => `${p.layerId}:${p.layerType}:${p.isOutput}`).join("|"),
+    () => pruneUnusedPassResources(passes.value),
+  );
+
   watch(canvasRef, (canvas) => {
     if (canvas && !renderer) {
       init();

@@ -55,11 +55,14 @@ const assignments = ref<ModulationAssignment[]>(data.assignments ?? []);
 
 const { getModulatedValue } = useModulationEngine(lfos, assignments);
 const modFn = computed(() => getModulatedValue);
-const { passes } = useLayerCompiler(layers, modFn);
+const { passes } = useLayerCompiler(layers, modFn, lfos, assignments);
 
 // Only activate the renderer when hovered
 const activeCanvasRef = computed(() => isHovered.value ? offscreenCanvas.value : null);
-useMultiPassRenderer(activeCanvasRef, passes);
+useMultiPassRenderer(activeCanvasRef, passes, {
+  layers,
+  getModulatedValue: modFn,
+});
 
 // Blit offscreen canvas to the visible display canvas
 let blitId: number | null = null;
