@@ -3,7 +3,7 @@ import type { RenderPass, LayerInstance } from "#shared/types/editor";
 import type { GradientStop } from "#shared/types";
 import { buildLayerUniforms, type ModulationFn } from "#shared/editor/compile-passes";
 
-const INT_UNIFORMS = new Set(["waveType", "shape", "coordMode"]);
+const INT_UNIFORMS = new Set(["waveType", "shape", "coordMode", "u_pointCount"]);
 
 type RendererOptions = {
   layers?: Ref<LayerInstance[]>;
@@ -14,6 +14,7 @@ type RendererOptions = {
 
 // Layer fragment shaders (imported as strings via vite-plugin-glsl)
 import gradientFrag from "#shared/shaders/layers/gradient.frag";
+import meshFrag from "#shared/shaders/layers/mesh.frag";
 import solidFrag from "#shared/shaders/layers/solid.frag";
 import noiseFrag from "#shared/shaders/layers/noise.frag";
 import distortionFrag from "#shared/shaders/layers/distortion.frag";
@@ -26,6 +27,7 @@ import fullscreenVert from "#shared/shaders/layers/fullscreen.vert";
 
 const FRAG_SHADERS: Record<string, string> = {
   gradient: gradientFrag,
+  mesh: meshFrag,
   solid: solidFrag,
   noise: noiseFrag,
   distortion: distortionFrag,
@@ -204,7 +206,10 @@ export function useMultiPassRenderer(
             val as GradientStop[],
           ),
         };
-      } else if (key === "u_color" && typeof val === "string") {
+      } else if (
+        (key === "u_color" || /^u_color\d+$/.test(key)) &&
+        typeof val === "string"
+      ) {
         uniforms[key] = { value: new THREE.Color(val) };
       } else if (Array.isArray(val) && val.length === 2) {
         uniforms[key] = { value: new THREE.Vector2(val[0] as number, val[1] as number) };

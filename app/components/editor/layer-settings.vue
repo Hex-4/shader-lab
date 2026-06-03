@@ -3,6 +3,8 @@ import { CollapsibleRoot, CollapsibleTrigger, CollapsibleContent } from "reka-ui
 import { ChevronRightIcon, DicesIcon, RotateCcwIcon } from "lucide-vue-next";
 import type { LayerInstance, LayerTemplate, LayerUniformDef, ModulationAssignment, LFOSource } from "#shared/types/editor";
 import type { GradientStop } from "#shared/types";
+import type { MeshPoint } from "#shared/types/mesh";
+import { cloneMeshPoints } from "#shared/editor/mesh-uniforms";
 import { applyModulation } from "#shared/editor/modulation";
 
 type Props = {
@@ -99,6 +101,13 @@ function randomizeUniforms(defs: LayerUniformDef[], target: Record<string, unkno
       const step = def.step ?? 0.01;
       const snap = (v: number) => Math.min(max, Math.max(min, Math.round(v / step) * step));
       target[def.name] = [snap(min + Math.random() * (max - min)), snap(min + Math.random() * (max - min))];
+    } else if (def.type === "meshPoints" && Array.isArray(def.default)) {
+      target[def.name] = (def.default as MeshPoint[]).map((p) => ({
+        x: Math.random(),
+        y: Math.random(),
+        color: hslToHex(Math.random() * 360, 45 + Math.random() * 35, 35 + Math.random() * 30),
+        radius: 0.4 + Math.random() * 0.7,
+      }));
     }
   }
 }
@@ -107,6 +116,8 @@ function resetToDefaults() {
   for (const def of template.uniforms) {
     if (def.type === "gradient" && Array.isArray(def.default)) {
       layer.values[def.name] = (def.default as GradientStop[]).map((s) => ({ ...s }));
+    } else if (def.type === "meshPoints" && Array.isArray(def.default)) {
+      layer.values[def.name] = cloneMeshPoints(def.default as MeshPoint[]);
     } else {
       layer.values[def.name] = def.default;
     }
@@ -144,6 +155,14 @@ function getGradient(def: LayerUniformDef, target: Record<string, unknown>): Gra
 }
 
 function setGradient(def: LayerUniformDef, target: Record<string, unknown>, v: GradientStop[]) {
+  target[def.name] = v;
+}
+
+function getMeshPoints(def: LayerUniformDef, target: Record<string, unknown>): MeshPoint[] {
+  return (target[def.name] as MeshPoint[]) ?? (def.default as MeshPoint[]);
+}
+
+function setMeshPoints(def: LayerUniformDef, target: Record<string, unknown>, v: MeshPoint[]) {
   target[def.name] = v;
 }
 
@@ -288,6 +307,19 @@ function isUniformVisible(def: LayerUniformDef): boolean {
                 :label="def.label"
                 @update:model-value="setGradient(def, layer.values, $event)"
               />
+              <!-- Mesh points -->
+              <EditorMeshPointsField
+                v-else-if="def.type === 'meshPoints'"
+                :model-value="getMeshPoints(def, layer.values)"
+                :layer-id="layer.id"
+                :assignments="assignments"
+                :lfos="lfos"
+                :dragging-lfo-id="draggingLfoId"
+                @update:model-value="setMeshPoints(def, layer.values, $event)"
+                @assign-lfo="emit('assign-lfo', $event)"
+                @remove-assignment="(sid, pname) => emit('remove-assignment', sid, pname)"
+                @update-depth="(sid, pname, depth) => emit('update-depth', sid, pname, depth)"
+              />
               <!-- Select -->
               <UiSelect
                 v-else-if="def.type === 'select'"
@@ -297,7 +329,7 @@ function isUniformVisible(def: LayerUniformDef): boolean {
                 @update:model-value="setSelect(def, layer.values, $event as string | number)"
               />
               <!-- Vec2 -->
-              <div v-else-if="def.type === 'vec2'" class="flex flex-col gap-2">
+              <div v-else-if="def.type === 'vec2'" class="flex flex-col gap-2 rounded-xl bg-surface-1 p-2.5">
                 <UiSliderField
                   :model-value="getVec2(def, layer.values)[0]"
                   :label="`${def.label} X`"

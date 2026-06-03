@@ -1,5 +1,6 @@
 import type { LayerInstance, RenderPass } from "../types/editor";
 import LAYER_TEMPLATES from "./layer-templates";
+import { expandMeshUniforms } from "./mesh-uniforms";
 
 export type ModulationFn = (
   layerId: string,
@@ -23,6 +24,11 @@ export function buildLayerUniforms(
     }
     uniforms[def.name] = value;
   }
+
+  if (layer.type === "mesh") {
+    return expandMeshUniforms(uniforms, modFn, layer.id);
+  }
+
   return uniforms;
 }
 

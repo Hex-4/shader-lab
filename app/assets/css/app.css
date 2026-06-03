@@ -358,5 +358,4 @@ html,
 body,
 #__nuxt {
   min-height: 100dvh;
-  overflow: hidden;
 }

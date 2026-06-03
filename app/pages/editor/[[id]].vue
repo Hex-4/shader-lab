@@ -3,45 +3,34 @@ import type { LayerInstance, LayerType, LFOSource, ModulationAssignment } from "
 import LAYER_TEMPLATES from "#shared/editor/layer-templates";
 import { LFO_COLORS, nextLfoColor } from "#shared/editor/lfo-colors";
 import { clonePresetPoints } from "#shared/editor/lfo-presets";
+import {
+  cloneCompositionPreset,
+  getCompositionPreset,
+  DEFAULT_PRESET_ID,
+} from "#shared/editor/composition-presets";
 import type { GradientStop } from "#shared/types";
+import type { MeshPoint } from "#shared/types/mesh";
 
 useHead({ title: "Editor — Shader Lab" });
 
 const route = useRoute();
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
-// --- Default composition ---
-
-const defaultLayers: LayerInstance[] = [
-  { id: "vignette-1", type: "vignette", enabled: true, values: { shape: 0, vignetteIntensity: 1.0, vignetteRadius: 0.4, vignetteSoftness: 0.4 } },
-  { id: "dither-1", type: "dither", enabled: true, values: { levels: 16, ditherScale: 4 } },
-  { id: "grain-1", type: "grain", enabled: true, values: { grainIntensity: 0.02, ditherScale: 4.0, speed: 50.0 } },
-  { id: "distortion-2", type: "distortion", enabled: true, values: { waveType: 0, freq: 1.9, amplitude: 0.4, sharpness: 1, pulseWidth: 0, skew: 0, direction: 0, coordMode: 0, centerX: 0, centerY: 0 } },
-  { id: "distortion-1", type: "distortion", enabled: true, values: { waveType: 1, freq: 3, amplitude: 0.51, sharpness: 6.7, pulseWidth: 0.04, skew: 0, direction: 315, coordMode: 0, centerX: 0, centerY: 0 } },
-  { id: "gradient-1", type: "gradient", enabled: true, values: { u_gradient: [{ color: "#000000", position: 0 }, { color: "#330d03", position: 0.15 }, { color: "#f35a0d", position: 0.35 }, { color: "#fff2d9", position: 0.6 }, { color: "#0f3839", position: 0.85 }, { color: "#000000", position: 1.0 }], angle: 90, offsetX: 0 } },
-];
-
-const defaultLfos: LFOSource[] = [
-  { id: "lfo-1", label: "Drift", color: LFO_COLORS[0]!, points: clonePresetPoints("sine"), rate: 0.1, phase: 0, mode: "loop" },
-  { id: "lfo-2", label: "Pulse", color: LFO_COLORS[1]!, points: clonePresetPoints("sine"), rate: 0.13, phase: 0, mode: "loop" },
-];
-
-const defaultAssignments: ModulationAssignment[] = [
-  { sourceId: "lfo-1", layerId: "distortion-1", paramName: "direction", depth: 90 },
-  { sourceId: "lfo-1", layerId: "gradient-1", paramName: "offsetX", depth: 0.5 },
-  { sourceId: "lfo-2", layerId: "distortion-1", paramName: "amplitude", depth: 0.4 },
-  { sourceId: "lfo-2", layerId: "distortion-1", paramName: "pulseWidth", depth: 0.25 },
-];
-
-// --- Load composition from server if ID is in the route ---
-
-const compositionId = ref<string | null>(null);
-const compositionName = ref("Untitled");
-const layers = ref<LayerInstance[]>(defaultLayers);
-const lfos = ref<LFOSource[]>(defaultLfos);
-const assignments = ref<ModulationAssignment[]>(defaultAssignments);
+// --- Load composition from server or preset ---
 
 const routeId = route.params.id as string | undefined;
+const presetId = (route.query.preset as string | undefined) ?? DEFAULT_PRESET_ID;
+const initialDoc = cloneCompositionPreset(
+  routeId ? DEFAULT_PRESET_ID : (getCompositionPreset(presetId) ? presetId : DEFAULT_PRESET_ID),
+);
+
+const compositionId = ref<string | null>(null);
+const compositionName = ref(
+  routeId ? "Untitled" : (getCompositionPreset(presetId)?.name ?? "Untitled"),
+);
+const layers = ref<LayerInstance[]>(initialDoc.layers);
+const lfos = ref<LFOSource[]>(initialDoc.lfos);
+const assignments = ref<ModulationAssignment[]>(initialDoc.assignments);
 
 if (routeId) {
   const { data } = await useFetch(`/api/compositions/${routeId}`);
@@ -61,7 +50,9 @@ if (routeId) {
 
 // --- Selection state ---
 
-const selectedLayerId = ref<string | null>(layers.value[layers.value.length - 2]?.id ?? null);
+const selectedLayerId = ref<string | null>(
+  layers.value.find((l) => l.enabled)?.id ?? layers.value[0]?.id ?? null,
+);
 
 const selectedLayer = computed(() => {
   if (!selectedLayerId.value) return null;
@@ -128,6 +119,8 @@ function addLayer(type: LayerType) {
   for (const def of template.uniforms) {
     if (def.type === "gradient" && Array.isArray(def.default)) {
       values[def.name] = (def.default as GradientStop[]).map((s) => ({ ...s }));
+    } else if (def.type === "meshPoints" && Array.isArray(def.default)) {
+      values[def.name] = (def.default as MeshPoint[]).map((p) => ({ ...p }));
     } else {
       values[def.name] = def.default;
     }
@@ -265,6 +258,7 @@ const selectedLayerAssignments = computed(() => {
 </script>
 
 <template>
+  <div class="h-dvh overflow-hidden">
   <ClientOnly>
     <canvas
       ref="canvasRef"
@@ -353,4 +347,5 @@ const selectedLayerAssignments = computed(() => {
       @delete-lfo="deleteLfo"
     />
   </ClientOnly>
+  </div>
 </template>

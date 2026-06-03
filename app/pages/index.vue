@@ -7,8 +7,14 @@ const { data: compositions, refresh } = await useFetch("/api/compositions");
 
 // Thumbnails are captured client-side from the editor and uploaded on save
 
-async function createNew() {
-  navigateTo("/editor");
+const newDialogOpen = ref(false);
+
+function openNewDialog() {
+  newDialogOpen.value = true;
+}
+
+function startWithPreset(presetId: string) {
+  navigateTo({ path: "/editor", query: { preset: presetId } });
 }
 
 async function deleteComposition(id: string) {
@@ -30,10 +36,10 @@ async function duplicateComposition(id: string) {
 <template>
   <div class="min-h-dvh bg-base-0">
     <!-- Header -->
-    <header class="flex items-center justify-between border-b border-edge px-6 py-4">
+    <header class="sticky top-0 z-10 flex items-center justify-between border-b border-edge bg-base-0/80 px-6 py-4 backdrop-blur-xl">
       <h1 class="text-title-sm font-semibold text-primary select-none">Shader Lab</h1>
       <div class="flex items-center gap-3">
-        <UiButton variant="action" :icon-left="PlusIcon" @click="createNew">
+        <UiButton variant="action" :icon-left="PlusIcon" @click="openNewDialog">
           New
         </UiButton>
         <DashboardUserMenu />
@@ -48,7 +54,7 @@ async function duplicateComposition(id: string) {
         class="flex flex-col items-center justify-center gap-4 py-24"
       >
         <p class="text-copy-sm text-tertiary">No compositions yet.</p>
-        <UiButton variant="action" :icon-left="PlusIcon" @click="createNew">
+        <UiButton variant="action" :icon-left="PlusIcon" @click="openNewDialog">
           Create your first shader
         </UiButton>
       </div>
@@ -71,5 +77,7 @@ async function duplicateComposition(id: string) {
         />
       </div>
     </main>
+
+    <DashboardNewCompositionDialog v-model:open="newDialogOpen" @select="startWithPreset" />
   </div>
 </template>

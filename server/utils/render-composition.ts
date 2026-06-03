@@ -6,6 +6,7 @@ import { applyModulation } from "#shared/editor/modulation";
 
 // Import shader sources as strings — these are bundled by vite-plugin-glsl on the server via rollup
 import gradientFrag from "#shared/shaders/layers/gradient.frag";
+import meshFrag from "#shared/shaders/layers/mesh.frag";
 import solidFrag from "#shared/shaders/layers/solid.frag";
 import noiseFrag from "#shared/shaders/layers/noise.frag";
 import distortionFrag from "#shared/shaders/layers/distortion.frag";
@@ -17,6 +18,7 @@ import outputFrag from "#shared/shaders/layers/output.frag";
 
 const FRAG_SHADERS: Record<LayerType | "resolve", string> = {
   gradient: gradientFrag,
+  mesh: meshFrag,
   solid: solidFrag,
   noise: noiseFrag,
   distortion: distortionFrag,
@@ -175,7 +177,7 @@ function createFBO(gl: WebGLRenderingContext, width: number, height: number) {
 
 // --- Set uniforms for a render pass ---
 
-const INT_UNIFORMS = new Set(["waveType", "shape", "coordMode"]);
+const INT_UNIFORMS = new Set(["waveType", "shape", "coordMode", "u_pointCount"]);
 
 function setPassUniforms(
   gl: WebGLRenderingContext,

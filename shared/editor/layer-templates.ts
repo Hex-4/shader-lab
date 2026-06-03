@@ -1,6 +1,40 @@
 import type { LayerTemplate, LayerType } from "../types/editor";
+import { MESH_BLOOM_POINTS } from "./mesh-uniforms";
 
 export const LAYER_TEMPLATES: Record<LayerType, LayerTemplate> = {
+  mesh: {
+    type: "mesh",
+    label: "Mesh",
+    category: "generator",
+    description: "Soft multi-point color field (mesh gradient)",
+    uniforms: [
+      {
+        name: "u_meshPoints",
+        type: "meshPoints",
+        label: "Color points",
+        default: MESH_BLOOM_POINTS,
+      },
+      {
+        name: "softness",
+        type: "float",
+        label: "Softness",
+        default: 1.4,
+        min: 0.4,
+        max: 4,
+        step: 0.05,
+      },
+      {
+        name: "gain",
+        type: "float",
+        label: "Gain",
+        default: 1.0,
+        min: 0.5,
+        max: 1.5,
+        step: 0.01,
+      },
+    ],
+  },
+
   gradient: {
     type: "gradient",
     label: "Gradient",

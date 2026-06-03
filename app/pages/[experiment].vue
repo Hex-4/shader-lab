@@ -55,6 +55,7 @@ function capture() {
 </script>
 
 <template>
+  <div class="h-dvh overflow-hidden">
   <ClientOnly>
     <CanvasShaderCanvas
       ref="canvasRef"
@@ -68,4 +69,5 @@ function capture() {
       @capture="capture"
     />
   </ClientOnly>
+  </div>
 </template>

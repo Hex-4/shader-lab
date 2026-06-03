@@ -2,6 +2,7 @@ export type LayerCategory = "generator" | "distortion" | "effect";
 
 export type LayerType =
   | "gradient"
+  | "mesh"
   | "solid"
   | "noise"
   | "distortion"
@@ -11,7 +12,7 @@ export type LayerType =
 
 export type LayerUniformDef = {
   name: string;
-  type: "float" | "int" | "color" | "vec2" | "gradient" | "bool" | "select";
+  type: "float" | "int" | "color" | "vec2" | "gradient" | "meshPoints" | "bool" | "select";
   label: string;
   default: unknown;
   min?: number;
