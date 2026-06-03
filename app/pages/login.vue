@@ -16,8 +16,8 @@ const error = useRoute().query.error as string | undefined;
   <div class="flex min-h-dvh items-center justify-center bg-base-0">
     <div class="flex w-80 flex-col items-center gap-6">
       <div class="flex flex-col items-center gap-2">
-        <h1 class="text-title-lg font-semibold text-primary">Shader Lab</h1>
-        <p class="text-copy-sm text-tertiary">Sign in to save and share your compositions</p>
+        <h1 class="text-copy-sm text-primary">Shader Lab</h1>
+        <p class="text-copy-sm text-tertiary">Sign in to save shaders and artworks</p>
       </div>
 
       <div v-if="error" class="w-full rounded-lg bg-danger/10 px-3 py-2 text-copy-sm text-danger">
@@ -26,7 +26,7 @@ const error = useRoute().query.error as string | undefined;
 
       <a
         href="/auth/google"
-        class="flex h-10 w-full items-center justify-center gap-3 rounded-xl bg-surface-1 text-copy-sm font-medium text-primary transition-colors duration-150 hover:bg-surface-2"
+        class="flex h-10 w-full items-center justify-center gap-3 rounded-xl bg-surface-1 text-copy-sm text-primary transition-colors duration-150 hover:bg-surface-2"
       >
         <svg class="size-4" viewBox="0 0 24 24">
           <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1Z" />
@@ -37,7 +37,7 @@ const error = useRoute().query.error as string | undefined;
         Continue with Google
       </a>
 
-      <p class="text-copy-xs text-tertiary">
+      <p class="text-copy-sm text-tertiary">
         By signing in, you agree to our terms of service.
       </p>
     </div>

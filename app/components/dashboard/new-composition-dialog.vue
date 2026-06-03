@@ -23,7 +23,7 @@ function choose(presetId: string) {
         class="fixed left-1/2 top-[10%] z-50 flex max-h-[min(85dvh,820px)] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 flex-col rounded-2xl border border-edge bg-base-1 shadow-2xl backdrop-blur-xl data-[state=open]:animate-contentShow"
       >
         <div class="flex shrink-0 items-center justify-between border-b border-edge px-4 py-3">
-          <DialogTitle class="text-copy-sm font-medium text-primary">
+          <DialogTitle class="text-copy-sm text-primary">
             New composition
           </DialogTitle>
           <UiButton variant="ghost" size="sm" :icon-left="XIcon" @click="open = false" />

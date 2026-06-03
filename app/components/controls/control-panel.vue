@@ -172,8 +172,8 @@ function randomize() {
       <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-edge bg-base-1/80 shadow-2xl backdrop-blur-xl">
         <div class="flex shrink-0 items-center justify-between border-b border-edge px-3 py-2.5">
           <div class="flex flex-col">
-            <span class="text-copy-sm font-medium text-primary">{{ experiment.name }}</span>
-            <span class="text-copy-xs text-tertiary">{{ experiment.description }}</span>
+            <span class="text-copy-sm text-primary">{{ experiment.name }}</span>
+            <span class="text-copy-sm text-tertiary">{{ experiment.description }}</span>
           </div>
           <div class="flex items-center gap-0.5">
             <UiButton variant="ghost" size="sm" :icon-left="DicesIcon" title="Randomize" @click="randomize" />

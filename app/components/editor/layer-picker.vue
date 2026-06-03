@@ -36,7 +36,7 @@ const categories = computed<CategoryGroup[]>(() => {
 <template>
   <div class="flex w-64 flex-col gap-3 p-3">
     <div v-for="group in categories" :key="group.key" class="flex flex-col gap-1">
-      <span class="px-2 text-copy-xs font-medium text-tertiary select-none">
+      <span class="px-2 text-copy-sm text-tertiary select-none">
         {{ group.label }}
       </span>
       <div class="flex flex-col">
@@ -47,7 +47,7 @@ const categories = computed<CategoryGroup[]>(() => {
           @click="emit('select', item.type)"
         >
           <span class="text-copy-sm text-primary select-none">{{ item.label }}</span>
-          <span class="text-copy-xs text-tertiary select-none">{{ item.description }}</span>
+          <span class="text-copy-sm text-tertiary select-none">{{ item.description }}</span>
         </button>
       </div>
     </div>

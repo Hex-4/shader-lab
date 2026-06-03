@@ -51,7 +51,7 @@ const isEmpty = computed(() => {
 <template>
   <div class="min-h-dvh bg-base-0">
     <header class="sticky top-0 z-10 flex items-center justify-between border-b border-edge bg-base-0/80 px-6 py-4 backdrop-blur-xl">
-      <h1 class="text-title-sm font-semibold text-primary select-none">Shader Lab</h1>
+      <h1 class="text-copy-sm text-primary select-none">Shader Lab</h1>
       <div class="flex items-center gap-3">
         <DashboardNewMenu />
         <DashboardUserMenu />
@@ -62,7 +62,7 @@ const isEmpty = computed(() => {
       <div class="mb-6 flex gap-1 rounded-lg bg-surface-1 p-1">
         <button
           type="button"
-          class="flex-1 rounded-md px-3 py-1.5 text-copy-sm font-medium transition-colors duration-150"
+          class="flex-1 rounded-md px-3 py-1.5 text-copy-sm transition-colors duration-150"
           :class="tab === 'artworks' ? 'bg-base-1 text-primary shadow-sm' : 'text-tertiary hover:text-secondary'"
           @click="tab = 'artworks'"
         >
@@ -70,7 +70,7 @@ const isEmpty = computed(() => {
         </button>
         <button
           type="button"
-          class="flex-1 rounded-md px-3 py-1.5 text-copy-sm font-medium transition-colors duration-150"
+          class="flex-1 rounded-md px-3 py-1.5 text-copy-sm transition-colors duration-150"
           :class="tab === 'shaders' ? 'bg-base-1 text-primary shadow-sm' : 'text-tertiary hover:text-secondary'"
           @click="tab = 'shaders'"
         >
@@ -91,7 +91,7 @@ const isEmpty = computed(() => {
         v-else-if="tab === 'shaders'"
         class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
       >
-        <DashboardCompositionCard
+        <DashboardShaderCard
           v-for="item in (shaders as any[])"
           :key="item.id"
           :id="item.id"

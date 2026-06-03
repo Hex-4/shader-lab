@@ -1,7 +1,12 @@
 import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { eq } from "drizzle-orm";
 import experiments from "#shared/experiments";
 import type { GradientStop, UniformValue } from "#shared/types";
 import { decodeState } from "#shared/utils/url-state";
+import { renderComposition } from "../../../utils/render-composition";
+import { shaders } from "../../../database/schema";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const OG_WIDTH = 1200;
 const OG_HEIGHT = 630;
@@ -181,24 +186,7 @@ async function renderShader(
   }
 }
 
-// --- Composite: shader pixels + logo + text ---
-
-async function compositeImage(pixels: Uint8Array): Promise<Buffer> {
-  const canvas = createCanvas(OG_WIDTH, OG_HEIGHT);
-  const ctx = canvas.getContext("2d");
-
-  // WebGL pixels are bottom-up, flip vertically
-  const imageData = ctx.createImageData(OG_WIDTH, OG_HEIGHT);
-  for (let y = 0; y < OG_HEIGHT; y++) {
-    const srcRow = (OG_HEIGHT - 1 - y) * OG_WIDTH * 4;
-    const dstRow = y * OG_WIDTH * 4;
-    for (let x = 0; x < OG_WIDTH * 4; x++) {
-      imageData.data[dstRow + x] = pixels[srcRow + x];
-    }
-  }
-  ctx.putImageData(imageData, 0, 0);
-
-  // Load and draw Zeitwork logo (top-left)
+async function drawOgOverlays(ctx: ReturnType<ReturnType<typeof createCanvas>["getContext"]>) {
   try {
     const storage = useStorage("assets:server");
     const logoSvg = await storage.getItemRaw("zeitwork-logo.svg");
@@ -212,7 +200,6 @@ async function compositeImage(pixels: Uint8Array): Promise<Buffer> {
     console.error("Failed to load logo:", e);
   }
 
-  // Draw "Shader Lab" title (bottom-left)
   try {
     const storage = useStorage("assets:server");
     const titleSvg = await storage.getItemRaw("shader-lab-title.svg");
@@ -227,7 +214,31 @@ async function compositeImage(pixels: Uint8Array): Promise<Buffer> {
   } catch (e) {
     console.error("Failed to load title:", e);
   }
+}
 
+async function compositeImage(pixels: Uint8Array): Promise<Buffer> {
+  const canvas = createCanvas(OG_WIDTH, OG_HEIGHT);
+  const ctx = canvas.getContext("2d");
+
+  const imageData = ctx.createImageData(OG_WIDTH, OG_HEIGHT);
+  for (let y = 0; y < OG_HEIGHT; y++) {
+    const srcRow = (OG_HEIGHT - 1 - y) * OG_WIDTH * 4;
+    const dstRow = y * OG_WIDTH * 4;
+    for (let x = 0; x < OG_WIDTH * 4; x++) {
+      imageData.data[dstRow + x] = pixels[srcRow + x]!;
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+  await drawOgOverlays(ctx);
+  return canvas.toBuffer("image/png");
+}
+
+async function compositeFromPngBuffer(png: Buffer): Promise<Buffer> {
+  const canvas = createCanvas(OG_WIDTH, OG_HEIGHT);
+  const ctx = canvas.getContext("2d");
+  const img = await loadImage(png);
+  ctx.drawImage(img, 0, 0, OG_WIDTH, OG_HEIGHT);
+  await drawOgOverlays(ctx);
   return canvas.toBuffer("image/png");
 }
 
@@ -240,13 +251,29 @@ export default defineEventHandler(async (event) => {
   const rawState = getRouterParam(event, "state");
   const state = rawState && rawState !== "_" ? rawState : undefined;
 
-  const pixels = await renderShader(id, state);
+  let png: Buffer | null = null;
 
-  if (!pixels) {
-    return sendRedirect(event, "/og-image.png", 302);
+  if (UUID_RE.test(id)) {
+    const db = useDrizzle();
+    const [row] = await db
+      .select({ data: shaders.data })
+      .from(shaders)
+      .where(eq(shaders.id, id))
+      .limit(1);
+    if (row?.data) {
+      const doc = row.data as Parameters<typeof renderComposition>[0];
+      const rendered = await renderComposition(doc, { width: OG_WIDTH, height: OG_HEIGHT, time: 2 });
+      if (rendered) png = await compositeFromPngBuffer(rendered);
+    }
   }
 
-  const png = await compositeImage(pixels);
+  if (!png) {
+    const pixels = await renderShader(id, state);
+    if (!pixels) {
+      return sendRedirect(event, "/og-image.png", 302);
+    }
+    png = await compositeImage(pixels);
+  }
 
   setResponseHeader(event, "Content-Type", "image/png");
   setResponseHeader(event, "Cache-Control", "public, max-age=86400, s-maxage=86400");

@@ -114,7 +114,7 @@ watch(
       v-else
       class="flex size-full items-center justify-center"
     >
-      <span class="text-copy-xs text-tertiary">Empty</span>
+      <span class="text-copy-sm text-tertiary">Empty</span>
     </div>
   </div>
 </template>

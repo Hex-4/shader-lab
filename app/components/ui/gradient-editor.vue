@@ -168,7 +168,7 @@ function onKeyDown(e: KeyboardEvent) {
     <UiColorPicker v-model="selectedColor" />
 
     <!-- Hint -->
-    <p class="text-copy-xs text-tertiary text-center select-none">
+    <p class="text-copy-sm text-tertiary text-center select-none">
       Double-click bar to add &#183; Select + Delete to remove
     </p>
   </div>

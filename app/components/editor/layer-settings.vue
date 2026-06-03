@@ -212,12 +212,12 @@ function isUniformVisible(def: LayerUniformDef): boolean {
 </script>
 
 <template>
-  <aside class="fixed bottom-4 right-4 top-4 z-40 flex w-72 flex-col overflow-hidden rounded-2xl border border-edge bg-base-1/80 shadow-2xl backdrop-blur-xl">
+  <aside class="flex h-full min-h-0 w-full flex-col overflow-hidden">
     <!-- Header -->
     <div class="flex shrink-0 items-center justify-between border-b border-edge px-3 py-2.5">
       <div class="flex flex-col">
-        <span class="text-copy-sm font-medium text-primary select-none">{{ layer.name ?? template.label }}</span>
-        <span class="text-copy-xs text-tertiary select-none">{{ template.description }}</span>
+        <span class="text-copy-sm text-primary select-none">{{ layer.name ?? template.label }}</span>
+        <span class="text-copy-sm text-tertiary select-none">{{ template.description }}</span>
       </div>
       <div class="flex items-center gap-0.5">
         <UiButton variant="ghost" size="sm" :icon-left="DicesIcon" title="Randomize" @click="randomizeUniforms(template.uniforms, layer.values)" />
@@ -243,7 +243,7 @@ function isUniformVisible(def: LayerUniformDef): boolean {
       <CollapsibleRoot v-model:open="settingsOpen">
         <div class="flex w-full items-center justify-between pr-2">
           <CollapsibleTrigger
-            class="flex flex-1 cursor-default items-center gap-1.5 px-3 py-2 text-copy-sm font-medium text-secondary transition-colors duration-150 select-none hover:text-primary"
+            class="flex flex-1 cursor-default items-center gap-1.5 px-3 py-2 text-copy-sm text-secondary transition-colors duration-150 select-none hover:text-primary"
           >
             <ChevronRightIcon
               :class="[

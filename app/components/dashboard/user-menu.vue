@@ -20,7 +20,7 @@ async function logout() {
           :alt="user.username"
           class="size-full object-cover"
         />
-        <span v-else class="text-copy-xs font-medium text-tertiary">
+        <span v-else class="text-copy-sm text-tertiary">
           {{ user?.username?.charAt(0)?.toUpperCase() ?? '?' }}
         </span>
       </button>
@@ -34,8 +34,8 @@ async function logout() {
         class="z-50 w-56 rounded-xl border border-edge bg-base-1 p-1 shadow-2xl backdrop-blur-xl data-[state=open]:animate-contentShow"
       >
         <div class="px-2.5 py-2">
-          <div class="text-copy-sm font-medium text-primary">{{ user?.username }}</div>
-          <div class="text-copy-xs text-tertiary">{{ user?.email }}</div>
+          <div class="text-copy-sm text-primary">{{ user?.username }}</div>
+          <div class="text-copy-sm text-tertiary">{{ user?.email }}</div>
         </div>
         <div class="my-1 h-px bg-surface-1" />
         <button

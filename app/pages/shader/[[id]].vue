@@ -13,9 +13,18 @@ import type { MeshPoint } from "#shared/types/mesh";
 
 useHead({ title: "Shader — Shader Lab" });
 
-const fromArtwork = computed(() => route.query.fromArtwork as string | undefined);
-
 const route = useRoute();
+const fromArtworkId = computed(() => route.query.fromArtwork as string | undefined);
+const exportOpen = ref(false);
+
+const { data: fromArtworkRow } = await useFetch(
+  () => (fromArtworkId.value ? `/api/artworks/${fromArtworkId.value}` : null),
+  { watch: [fromArtworkId] },
+);
+const fromArtworkName = computed(() => {
+  const row = fromArtworkRow.value as { name?: string } | null;
+  return row?.name;
+});
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 
 // --- Load composition from server or preset ---
@@ -78,7 +87,7 @@ const selectedLfo = computed(() => {
 
 // --- Modulation Engine ---
 
-const { lfoValues, lfoPhases, getModulatedValue } = useModulationEngine(lfos, assignments);
+const { lfoValues, lfoPhases, getModulatedValue, sampleLfosAtTime } = useModulationEngine(lfos, assignments);
 
 const modFn = computed(() => getModulatedValue);
 
@@ -92,10 +101,30 @@ const selectedLfoCursorPosition = computed(() => {
 // --- Layer Compiler + Renderer ---
 
 const { passes } = useLayerCompiler(layers, modFn, lfos, assignments);
-const { getCanvas } = useMultiPassRenderer(canvasRef, passes, {
+const {
+  getCanvas,
+  capture,
+  pause,
+  resume,
+  configureRenderer,
+  restoreRenderer,
+  renderFrame,
+} = useMultiPassRenderer(canvasRef, passes, {
   layers,
   getModulatedValue: modFn,
+  sampleLfosAtTime,
 });
+
+const shaderExport = {
+  capture: (w: number, h: number) =>
+    capture(w, h, `${shaderId.value ?? "shader"}-${w}x${h}.png`),
+  pause,
+  resume,
+  getCanvas,
+  configureRenderer,
+  restoreRenderer,
+  renderFrame,
+};
 
 // --- Auto-Save ---
 
@@ -260,43 +289,61 @@ const selectedLayerAssignments = computed(() => {
 </script>
 
 <template>
-  <div class="h-dvh overflow-hidden">
-  <ClientOnly>
-    <canvas
-      ref="canvasRef"
-      class="fixed inset-0 size-full"
-    />
-
-    <!-- Top bar -->
-    <div class="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-edge bg-base-1/80 px-3 py-1.5 shadow-2xl backdrop-blur-xl">
+  <EditorFrame>
+    <template #header>
       <NuxtLink
-        :to="fromArtwork ? `/artwork/${fromArtwork}` : '/'"
-        class="text-copy-sm text-tertiary transition-colors duration-150 hover:text-primary"
+        :to="fromArtworkId ? `/artwork/${fromArtworkId}` : '/'"
+        class="shrink-0 text-copy-sm text-tertiary transition-colors duration-150 hover:text-primary"
       >
-        {{ fromArtwork ? "Back to artwork" : "Shader Lab" }}
+        {{ fromArtworkId ? (fromArtworkName ?? "Artwork") : "Shader Lab" }}
       </NuxtLink>
+      <template v-if="fromArtworkId">
+        <span class="text-copy-sm text-tertiary">›</span>
+      </template>
       <div class="h-4 w-px bg-surface-1" />
-      <UiEditableText v-model="shaderName" fill class="text-copy-sm text-secondary" />
-    </div>
+      <UiEditableText v-model="shaderName" fill class="min-w-0 flex-1 text-copy-sm text-secondary" />
+      <UiButton variant="ghost" size="sm" @click="exportOpen = true">
+        Export
+      </UiButton>
+    </template>
 
-    <!-- Layer Stack Panel (left) -->
-    <EditorLayerStack
-      v-model:layers="layers"
-      v-model:selected-layer-id="selectedLayerId"
-      @add-layer="addLayer"
-      @duplicate-layer="duplicateLayer"
-      @remove-layer="removeLayer"
-    />
+    <template #left>
+      <EditorLayerStack
+        v-model:layers="layers"
+        v-model:selected-layer-id="selectedLayerId"
+        @add-layer="addLayer"
+        @duplicate-layer="duplicateLayer"
+        @remove-layer="removeLayer"
+      />
+    </template>
 
-    <!-- Layer Settings Panel (right) -->
-    <Transition
-      enter-active-class="transition-all duration-300 ease-out-expo"
-      enter-from-class="translate-x-4 opacity-0"
-      enter-to-class="translate-x-0 opacity-100"
-      leave-active-class="transition-all duration-200 ease-out-expo"
-      leave-from-class="translate-x-0 opacity-100"
-      leave-to-class="translate-x-4 opacity-0"
-    >
+    <ClientOnly>
+      <div class="relative size-full min-h-0 overflow-hidden">
+        <canvas
+          ref="canvasRef"
+          class="absolute inset-0 size-full"
+        />
+      </div>
+    </ClientOnly>
+
+    <template #footer>
+      <EditorLfoConfig
+        v-if="selectedLfo"
+        :lfo="selectedLfo"
+        :cursor-position="selectedLfoCursorPosition"
+        @delete="deleteLfo(selectedLfo!.id)"
+      />
+      <EditorLfoRack
+        v-model:lfos="lfos"
+        v-model:selected-lfo-id="selectedLfoId"
+        @drag-start="(id: string, x: number, y: number) => onDragStart(id, x, y)"
+        @duplicate-lfo="duplicateLfo"
+        @clear-assignments="clearLfoAssignments"
+        @delete-lfo="deleteLfo"
+      />
+    </template>
+
+    <template #right>
       <EditorLayerSettings
         v-if="selectedLayer && selectedTemplate"
         :key="selectedLayer.id"
@@ -309,48 +356,33 @@ const selectedLayerAssignments = computed(() => {
         @remove-assignment="removeAssignment"
         @update-depth="updateDepth"
       />
-    </Transition>
+      <div
+        v-else
+        class="flex flex-1 items-center justify-center p-6 text-center"
+      >
+        <p class="text-copy-sm text-tertiary">
+          Select a layer to edit its settings.
+        </p>
+      </div>
+    </template>
+  </EditorFrame>
 
-    <!-- LFO Config Panel -->
-    <Transition
-      enter-active-class="transition-all duration-200 ease-out-expo"
-      enter-from-class="translate-y-4 opacity-0"
-      enter-to-class="translate-y-0 opacity-100"
-      leave-active-class="transition-all duration-150 ease-out-expo"
-      leave-from-class="translate-y-0 opacity-100"
-      leave-to-class="translate-y-4 opacity-0"
-    >
-      <EditorLfoConfig
-        v-if="selectedLfo"
-        :lfo="selectedLfo"
-        :cursor-position="selectedLfoCursorPosition"
-        @delete="deleteLfo(selectedLfo!.id)"
-      />
-    </Transition>
-
-    <!-- Drag ghost -->
-    <div
-      v-if="draggingLfo"
-      class="pointer-events-none fixed z-50 flex w-max items-center gap-2 whitespace-nowrap rounded-lg border border-edge bg-base-1 px-2.5 py-1.5 text-copy-xs font-medium text-primary shadow-2xl"
-      :style="{
-        left: `${dragPos.x}px`,
-        top: `${dragPos.y}px`,
-        transform: 'translate(-50%, -50%)',
-      }"
-    >
-      <span class="size-2.5 rounded-full" :style="{ backgroundColor: draggingLfo.color }" />
-      <span>{{ draggingLfo.label }}</span>
-    </div>
-
-    <!-- LFO Rack (bottom bar) -->
-    <EditorLfoRack
-      v-model:lfos="lfos"
-      v-model:selected-lfo-id="selectedLfoId"
-      @drag-start="(id: string, x: number, y: number) => onDragStart(id, x, y)"
-      @duplicate-lfo="duplicateLfo"
-      @clear-assignments="clearLfoAssignments"
-      @delete-lfo="deleteLfo"
-    />
-  </ClientOnly>
+  <div
+    v-if="draggingLfo"
+    class="pointer-events-none fixed z-50 flex w-max items-center gap-2 whitespace-nowrap rounded-lg border border-edge bg-base-1 px-2.5 py-1.5 text-copy-sm text-primary shadow-2xl"
+    :style="{
+      left: `${dragPos.x}px`,
+      top: `${dragPos.y}px`,
+      transform: 'translate(-50%, -50%)',
+    }"
+  >
+    <span class="size-2.5 rounded-full" :style="{ backgroundColor: draggingLfo.color }" />
+    <span>{{ draggingLfo.label }}</span>
   </div>
+
+  <ControlsExportDialog
+    v-model:open="exportOpen"
+    :experiment-id="shaderId ?? 'shader'"
+    :shader="shaderExport"
+  />
 </template>

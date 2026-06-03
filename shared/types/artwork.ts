@@ -12,13 +12,31 @@ export type ArtworkShaderLayer = {
   enabled: boolean;
 };
 
+export type ArtworkTextRunStyle = {
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  color?: string;
+};
+
+export type ArtworkTextRun = {
+  text: string;
+  style?: ArtworkTextRunStyle;
+};
+
 export type ArtworkTextLayer = {
   id: string;
   type: "text";
   enabled: boolean;
+  /** Flattened plain text (kept in sync with runs) */
   content: string;
+  runs?: ArtworkTextRun[];
   fontFamily: string;
   fontSize: number;
+  fontWeight?: number;
+  fontStyle?: "normal" | "italic";
+  letterSpacing?: number;
+  lineHeight?: number;
   color: string;
   x: number;
   y: number;
@@ -34,6 +52,8 @@ export type ArtworkImageLayer = {
   x: number;
   y: number;
   scale: number;
+  /** Corner radius in design px (1080-tall reference), like fontSize */
+  borderRadius?: number;
   opacity: number;
 };
 

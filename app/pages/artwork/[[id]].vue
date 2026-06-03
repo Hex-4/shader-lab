@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { PlusIcon } from "lucide-vue-next";
-import { PopoverRoot, PopoverTrigger, PopoverContent, PopoverPortal } from "reka-ui";
+import { DownloadIcon } from "lucide-vue-next";
 import type {
   ArtworkDocument,
   ArtworkLayer,
-  ArtworkTextLayer,
   ArtworkShaderLayer,
   ShaderDocument,
 } from "#shared/types/artwork";
@@ -14,6 +12,7 @@ import {
   DEFAULT_ARTWORK_PRESET_ID,
 } from "#shared/editor/artwork-presets";
 import { cloneShaderPreset } from "#shared/editor/shader-presets";
+import { ArtworkTextEditKey, useArtworkTextEdit } from "~/composables/use-artwork-text-edit";
 
 useHead({ title: "Artwork — Shader Lab" });
 
@@ -32,8 +31,13 @@ const artworkName = ref(
   routeId ? "Untitled" : (getArtworkPreset(presetQuery)?.name ?? "Untitled"),
 );
 const artworkDoc = ref<ArtworkDocument>(initialBuilt);
-const shaderCache = ref<Record<string, ShaderDocument>>({});
+const shaderCache = ref<Record<string, ShaderDocument & { name?: string }>>({});
+const shaderNames = ref<Record<string, string>>({});
 const bootstrapDone = ref(!!routeId);
+const exportOpen = ref(false);
+const shaderPickerOpen = ref(false);
+const shaderPickerMode = ref<"add" | "swap">("add");
+const shaderSwapLayerId = ref<string | null>(null);
 
 const selectedLayerId = ref<string | null>(
   artworkDoc.value.layers[0]?.id ?? null,
@@ -43,11 +47,18 @@ const selectedLayer = computed(() =>
   artworkDoc.value.layers.find((l) => l.id === selectedLayerId.value) ?? null,
 );
 
+const textEdit = useArtworkTextEdit(artworkDoc, selectedLayerId);
+provide(ArtworkTextEditKey, textEdit);
+
 async function loadShaderIntoCache(shaderId: string) {
   if (shaderCache.value[shaderId] || shaderId === "__pending__") return;
   try {
-    const row = await $fetch(`/api/shaders/${shaderId}`) as { data: ShaderDocument };
-    shaderCache.value[shaderId] = row.data;
+    const row = await $fetch(`/api/shaders/${shaderId}`) as {
+      name: string;
+      data: ShaderDocument;
+    };
+    shaderCache.value = { ...shaderCache.value, [shaderId]: row.data };
+    shaderNames.value = { ...shaderNames.value, [shaderId]: row.name };
   } catch {
     // ignore
   }
@@ -70,7 +81,7 @@ async function bootstrapPendingShader() {
       },
     }) as { id: string; data: ShaderDocument };
     layer.shaderId = created.id;
-    shaderCache.value[created.id] = created.data;
+    shaderCache.value = { ...shaderCache.value, [created.id]: created.data };
   }
 
   bootstrapDone.value = true;
@@ -90,13 +101,33 @@ if (routeId) {
       }
     }
   }
-} else {
-  await bootstrapPendingShader();
 }
+
+onMounted(async () => {
+  if (!routeId && !bootstrapDone.value) {
+    await bootstrapPendingShader();
+  }
+});
 
 const artworkData = computed(() => artworkDoc.value);
 
-const { getDisplayCanvas } = useArtworkPreview(canvasRef, artworkDoc, shaderCache);
+const {
+  getDisplayCanvas,
+  rendererControls,
+  sampleLfosAtTime,
+  imageCache,
+} = useArtworkPreview(canvasRef, artworkDoc, shaderCache, textEdit.editingLayerId);
+
+const { getExportControls } = useArtworkExport(
+  artworkDoc,
+  shaderCache,
+  rendererControls,
+  sampleLfosAtTime,
+);
+
+const exportControls = computed(() =>
+  getExportControls(artworkId.value ?? "artwork"),
+);
 
 const saveEnabled = computed(() => bootstrapDone.value);
 
@@ -118,7 +149,14 @@ watch(
   { deep: true, immediate: true },
 );
 
-const pickerOpen = ref(false);
+function layerLabel(layer: ArtworkLayer): string {
+  if (layer.type === "shader") {
+    const name = shaderNames.value[layer.shaderId];
+    return name ? `Shader · ${name}` : "Shader";
+  }
+  if (layer.type === "text") return "Text";
+  return "Image";
+}
 
 function addTextLayer() {
   const id = `text-${Date.now()}`;
@@ -127,8 +165,13 @@ function addTextLayer() {
     type: "text",
     enabled: true,
     content: "Your headline",
-    fontFamily: "system-ui",
+    runs: [{ text: "Your headline" }],
+    fontFamily: "Inter",
     fontSize: 48,
+    fontWeight: 400,
+    fontStyle: "normal",
+    lineHeight: 1.25,
+    letterSpacing: 0,
     color: "#ffffff",
     x: 0.5,
     y: 0.55,
@@ -136,8 +179,65 @@ function addTextLayer() {
     opacity: 1,
   });
   selectedLayerId.value = id;
-  pickerOpen.value = false;
 }
+
+function addImageLayer() {
+  const id = `image-${Date.now()}`;
+  artworkDoc.value.layers.unshift({
+    id,
+    type: "image",
+    enabled: true,
+    src: "",
+    x: 0.5,
+    y: 0.5,
+    scale: 1,
+    borderRadius: 0,
+    opacity: 1,
+  });
+  selectedLayerId.value = id;
+}
+
+function addShaderLayer(shaderId: string) {
+  const id = `shader-${Date.now()}`;
+  artworkDoc.value.layers.unshift({
+    id,
+    type: "shader",
+    shaderId,
+    enabled: true,
+  });
+  selectedLayerId.value = id;
+  loadShaderIntoCache(shaderId);
+}
+
+function openShaderPickerAdd() {
+  shaderPickerMode.value = "add";
+  shaderSwapLayerId.value = null;
+  shaderPickerOpen.value = true;
+}
+
+function openShaderPickerSwap(layer: ArtworkShaderLayer) {
+  shaderPickerMode.value = "swap";
+  shaderSwapLayerId.value = layer.id;
+  shaderPickerOpen.value = true;
+}
+
+function onShaderPickerSelect(shaderId: string) {
+  if (shaderPickerMode.value === "swap" && shaderSwapLayerId.value) {
+    const layer = artworkDoc.value.layers.find((l) => l.id === shaderSwapLayerId.value);
+    if (layer?.type === "shader") {
+      layer.shaderId = shaderId;
+      loadShaderIntoCache(shaderId);
+    }
+    return;
+  }
+  addShaderLayer(shaderId);
+}
+
+const shaderPickerCurrentId = computed(() => {
+  if (shaderPickerMode.value !== "swap" || !shaderSwapLayerId.value) return undefined;
+  const layer = artworkDoc.value.layers.find((l) => l.id === shaderSwapLayerId.value);
+  return layer?.type === "shader" ? layer.shaderId : undefined;
+});
 
 function removeLayer(id: string) {
   const idx = artworkDoc.value.layers.findIndex((l) => l.id === id);
@@ -156,144 +256,122 @@ function editShaderLayer(layer: ArtworkShaderLayer) {
   });
 }
 
-function layerLabel(layer: ArtworkLayer): string {
-  if (layer.type === "shader") return "Shader";
-  if (layer.type === "text") return "Text";
-  return "Image";
+async function duplicateShaderLayer(layer: ArtworkShaderLayer) {
+  if (layer.shaderId === "__pending__") return;
+  const source = await $fetch(`/api/shaders/${layer.shaderId}`) as {
+    name: string;
+    data: ShaderDocument;
+  };
+  const created = await $fetch("/api/shaders", {
+    method: "POST",
+    body: { name: `${source.name} Copy`, data: source.data },
+  }) as { id: string; data: ShaderDocument };
+  layer.shaderId = created.id;
+  shaderCache.value[created.id] = created.data;
+  shaderNames.value[created.id] = `${source.name} Copy`;
 }
 
-const selectedText = computed(() =>
-  selectedLayer.value?.type === "text" ? selectedLayer.value as ArtworkTextLayer : null,
-);
+function createNewShaderFromArtwork() {
+  const query: Record<string, string> = {};
+  if (artworkId.value) query.fromArtwork = artworkId.value;
+  navigateTo({ path: "/shader", query });
+}
 </script>
 
 <template>
-  <div class="h-dvh overflow-hidden">
-    <ClientOnly>
-      <div class="fixed inset-0 flex items-center justify-center bg-base-0 p-16 pt-20 pb-8">
-        <canvas
-          ref="canvasRef"
-          class="max-h-full max-w-full rounded-xl border border-edge shadow-2xl"
-          :style="{ aspectRatio: `${artworkDoc.canvas.width} / ${artworkDoc.canvas.height}` }"
-        />
-      </div>
-
-      <div class="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-edge bg-base-1/80 px-3 py-1.5 shadow-2xl backdrop-blur-xl">
-        <NuxtLink to="/" class="text-copy-sm text-tertiary transition-colors duration-150 hover:text-primary">
-          Shader Lab
-        </NuxtLink>
-        <div class="h-4 w-px bg-surface-1" />
-        <UiEditableText v-model="artworkName" fill class="text-copy-sm text-secondary" />
-        <span class="text-copy-xs text-tertiary select-none">
-          {{ artworkDoc.canvas.width }}×{{ artworkDoc.canvas.height }}
-        </span>
-      </div>
-
-      <!-- Layer stack -->
-      <div class="fixed bottom-4 left-4 top-4 z-40 flex w-56 flex-col">
-        <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-edge bg-base-1/80 shadow-2xl backdrop-blur-xl">
-          <div class="flex shrink-0 items-center justify-between border-b border-edge px-3 py-2.5">
-            <span class="text-copy-sm font-medium text-primary select-none">Layers</span>
-            <PopoverRoot v-model:open="pickerOpen">
-              <PopoverTrigger as-child>
-                <button class="flex size-6 cursor-default items-center justify-center rounded-md text-tertiary transition-colors duration-150 hover:bg-surface-1 hover:text-secondary">
-                  <PlusIcon class="size-3.5" />
-                </button>
-              </PopoverTrigger>
-              <PopoverPortal>
-                <PopoverContent
-                  side="right"
-                  :side-offset="12"
-                  class="z-50 rounded-xl border border-edge bg-base-1 p-2 shadow-2xl"
-                >
-                  <button
-                    type="button"
-                    class="w-full rounded-lg px-2 py-1.5 text-left text-copy-sm text-primary hover:bg-surface-1"
-                    @click="addTextLayer"
-                  >
-                    Text
-                  </button>
-                </PopoverContent>
-              </PopoverPortal>
-            </PopoverRoot>
-          </div>
-          <div class="flex-1 overflow-y-auto p-2">
-            <button
-              v-for="layer in artworkDoc.layers"
-              :key="layer.id"
-              type="button"
-              class="mb-1 flex w-full cursor-default items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors duration-150"
-              :class="selectedLayerId === layer.id ? 'bg-surface-1 text-primary' : 'text-secondary hover:bg-surface-1/60'"
-              @click="selectedLayerId = layer.id"
-            >
-              <span class="text-copy-sm">{{ layerLabel(layer) }}</span>
-              <span
-                v-if="!layer.enabled"
-                class="text-copy-xs text-tertiary"
-              >Off</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Inspector -->
-      <aside
-        v-if="selectedLayer"
-        class="fixed bottom-4 right-4 top-4 z-40 flex w-72 flex-col overflow-hidden rounded-2xl border border-edge bg-base-1/80 shadow-2xl backdrop-blur-xl"
+  <EditorFrame>
+    <template #header>
+      <NuxtLink
+        to="/"
+        class="text-copy-sm text-tertiary transition-colors duration-150 hover:text-primary"
       >
-        <div class="border-b border-edge px-3 py-2.5">
-          <span class="text-copy-sm font-medium text-primary">{{ layerLabel(selectedLayer) }}</span>
+        Shader Lab
+      </NuxtLink>
+      <div class="h-4 w-px bg-surface-1" />
+      <UiEditableText v-model="artworkName" fill class="min-w-0 flex-1 text-copy-sm text-secondary" />
+      <ArtworkCanvasSizeControl v-model:canvas="artworkDoc.canvas" />
+      <UiButton variant="ghost" size="sm" :icon-left="DownloadIcon" @click="exportOpen = true">
+        Export
+      </UiButton>
+    </template>
+
+    <template #left>
+      <ArtworkLayerStack
+        v-model:layers="artworkDoc.layers"
+        v-model:selected-layer-id="selectedLayerId"
+        :layer-label="layerLabel"
+        @add-text="addTextLayer"
+        @add-image="addImageLayer"
+        @pick-shader="openShaderPickerAdd"
+        @remove-layer="removeLayer"
+      />
+    </template>
+
+    <ClientOnly>
+      <div class="flex size-full min-h-0 items-center justify-center p-6">
+        <ArtworkCanvasStage
+          v-model:selected-layer-id="selectedLayerId"
+          :artwork="artworkDoc"
+          :image-cache="imageCache"
+          class="max-h-full max-w-full"
+        >
+          <canvas
+            ref="canvasRef"
+            class="block size-full rounded-lg border border-edge shadow-lg"
+          />
+        </ArtworkCanvasStage>
+      </div>
+    </ClientOnly>
+
+    <template #right>
+      <div
+        v-if="selectedLayer"
+        class="flex h-full min-h-0 flex-col"
+      >
+        <div class="shrink-0 border-b border-edge px-3 py-2.5">
+          <span class="text-copy-sm text-primary">{{ layerLabel(selectedLayer) }}</span>
         </div>
         <div class="flex flex-1 flex-col gap-3 overflow-y-auto p-3">
-          <template v-if="selectedLayer.type === 'shader'">
-            <p class="text-copy-xs text-tertiary">
-              Background shader for this artwork.
-            </p>
-            <UiButton
-              variant="action"
-              :disabled="selectedLayer.shaderId === '__pending__'"
-              @click="editShaderLayer(selectedLayer)"
-            >
-              Edit shader
-            </UiButton>
-          </template>
-          <template v-else-if="selectedText">
-            <UiSliderField
-              v-model="selectedText.x"
-              label="X"
-              :min="0"
-              :max="1"
-              :step="0.01"
-            />
-            <UiSliderField
-              v-model="selectedText.y"
-              label="Y"
-              :min="0"
-              :max="1"
-              :step="0.01"
-            />
-            <UiSliderField
-              v-model="selectedText.fontSize"
-              label="Size"
-              :min="12"
-              :max="120"
-              :step="1"
-            />
-            <UiColorField v-model="selectedText.color" label="Color" />
-            <label class="flex flex-col gap-1">
-              <span class="text-copy-xs text-tertiary">Content</span>
-              <textarea
-                v-model="selectedText.content"
-                rows="3"
-                class="rounded-lg border border-edge bg-surface-1 px-2 py-1.5 text-copy-sm text-primary"
-              />
-            </label>
-          </template>
-          <UiButton variant="ghost" size="sm" @click="removeLayer(selectedLayer.id)">
-            Remove layer
-          </UiButton>
+          <ArtworkShaderLayerInspector
+            v-if="selectedLayer.type === 'shader'"
+            :layer="selectedLayer"
+            :shader-name="shaderNames[selectedLayer.shaderId]"
+            @swap-shader="openShaderPickerSwap(selectedLayer)"
+            @edit-shader="editShaderLayer(selectedLayer)"
+            @duplicate-shader="duplicateShaderLayer(selectedLayer)"
+          />
+          <ArtworkTextInspector
+            v-else-if="selectedLayer.type === 'text'"
+            :layer="selectedLayer"
+          />
+          <ArtworkImageInspector
+            v-else-if="selectedLayer.type === 'image'"
+            :layer="selectedLayer"
+          />
         </div>
-      </aside>
-    </ClientOnly>
-  </div>
+      </div>
+      <div
+        v-else
+        class="flex flex-1 items-center justify-center p-6 text-center"
+      >
+        <p class="text-copy-sm text-tertiary">
+          Select a layer to edit its properties.
+        </p>
+      </div>
+    </template>
+  </EditorFrame>
+
+  <ArtworkShaderPickerDialog
+    v-model:open="shaderPickerOpen"
+    :mode="shaderPickerMode"
+    :current-shader-id="shaderPickerCurrentId"
+    @select="onShaderPickerSelect"
+    @create-new="createNewShaderFromArtwork"
+  />
+
+  <ControlsExportDialog
+    v-model:open="exportOpen"
+    :experiment-id="artworkId ?? 'artwork'"
+    :shader="exportControls"
+  />
 </template>

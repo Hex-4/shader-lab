@@ -21,12 +21,12 @@ function applyPreset(key: string) {
 </script>
 
 <template>
-  <div class="fixed bottom-20 left-60 right-80 z-40 mx-auto max-w-lg rounded-2xl border border-edge bg-base-1/80 shadow-2xl backdrop-blur-xl">
+  <div class="mx-auto w-full max-w-lg rounded-xl border border-edge bg-surface-1/50">
     <div class="flex flex-col gap-3 p-3">
       <div class="flex items-center justify-between px-1">
         <div class="flex min-w-0 flex-1 items-center gap-2">
           <span class="size-2.5 shrink-0 rounded-full" :style="{ backgroundColor: lfo.color }" />
-          <UiEditableText v-model="lfo.label" fill class="text-copy-sm font-medium text-primary" />
+          <UiEditableText v-model="lfo.label" fill class="text-copy-sm text-primary" />
         </div>
         <button
           class="flex size-6 items-center justify-center rounded-md text-tertiary transition-colors duration-150 hover:bg-surface-1 hover:text-secondary"

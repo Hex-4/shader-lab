@@ -32,15 +32,15 @@ const doc = cloneCompositionPreset(props.preset.id);
         />
         <template #fallback>
           <div class="flex size-full items-center justify-center">
-            <span class="text-copy-xs text-tertiary">Loading…</span>
+            <span class="text-copy-sm text-tertiary">Loading…</span>
           </div>
         </template>
       </ClientOnly>
     </div>
 
     <div class="flex min-w-0 flex-col gap-0.5 px-1 pb-1">
-      <span class="text-copy-sm font-medium text-primary">{{ preset.name }}</span>
-      <span class="line-clamp-2 text-copy-xs text-tertiary">{{ preset.description }}</span>
+      <span class="text-copy-sm text-primary">{{ preset.name }}</span>
+      <span class="line-clamp-2 text-copy-sm text-tertiary">{{ preset.description }}</span>
     </div>
   </button>
 </template>

@@ -91,7 +91,7 @@ async function handleVideoExport() {
         class="fixed left-1/2 top-[20%] z-50 w-80 -translate-x-1/2 rounded-2xl border border-edge bg-base-1 shadow-2xl backdrop-blur-xl data-[state=open]:animate-contentShow"
       >
         <div class="flex items-center justify-between border-b border-edge px-4 py-3">
-          <DialogTitle class="text-copy-sm font-medium text-primary">
+          <DialogTitle class="text-copy-sm text-primary">
             Export
           </DialogTitle>
           <UiButton variant="ghost" size="sm" :icon-left="XIcon" @click="open = false" />
@@ -102,7 +102,7 @@ async function handleVideoExport() {
             <button
               v-for="t in (['image', 'video'] as const)"
               :key="t"
-              class="flex-1 rounded-md px-3 py-1.5 text-copy-sm font-medium capitalize transition-colors"
+              class="flex-1 rounded-md px-3 py-1.5 text-copy-sm capitalize transition-colors"
               :class="tab === t ? 'bg-base-1 text-primary shadow-sm' : 'text-tertiary hover:text-secondary'"
               @click="tab = t"
             >
@@ -112,7 +112,7 @@ async function handleVideoExport() {
 
           <div v-if="tab === 'image'" class="mt-4 flex flex-col gap-4">
             <div class="flex flex-col gap-2">
-              <span class="text-copy-xs text-tertiary">Resolution</span>
+              <span class="text-copy-sm text-tertiary">Resolution</span>
               <div class="flex gap-1.5">
                 <UiButton
                   v-for="(res, i) in imageResolutions"
@@ -125,7 +125,7 @@ async function handleVideoExport() {
                   {{ res.label }}
                 </UiButton>
               </div>
-              <span class="text-copy-xs text-tertiary">
+              <span class="text-copy-sm text-tertiary">
                 {{ imageResolutions[selectedImageResolution]!.width }} x {{ imageResolutions[selectedImageResolution]!.height }}
               </span>
             </div>
@@ -138,7 +138,7 @@ async function handleVideoExport() {
           <div v-if="tab === 'video'" class="mt-4 flex flex-col gap-4">
             <div v-if="!videoState.exporting" class="flex flex-col gap-4">
               <div class="flex flex-col gap-2">
-                <span class="text-copy-xs text-tertiary">Resolution</span>
+                <span class="text-copy-sm text-tertiary">Resolution</span>
                 <div class="flex gap-1.5">
                   <UiButton
                     v-for="(res, i) in videoResolutions"
@@ -154,7 +154,7 @@ async function handleVideoExport() {
               </div>
 
               <div class="flex flex-col gap-2">
-                <span class="text-copy-xs text-tertiary">Duration</span>
+                <span class="text-copy-sm text-tertiary">Duration</span>
                 <div class="flex gap-1.5">
                   <UiButton
                     v-for="(dur, i) in durations"
@@ -170,7 +170,7 @@ async function handleVideoExport() {
               </div>
 
               <div class="flex flex-col gap-2">
-                <span class="text-copy-xs text-tertiary">Frame rate</span>
+                <span class="text-copy-sm text-tertiary">Frame rate</span>
                 <div class="flex gap-1.5">
                   <UiButton
                     v-for="(fps, i) in fpsOptions"
@@ -192,10 +192,10 @@ async function handleVideoExport() {
 
             <div v-else class="flex flex-col gap-3">
               <div class="flex items-center justify-between">
-                <span class="text-copy-xs text-secondary">
+                <span class="text-copy-sm text-secondary">
                   Rendering frame {{ videoState.currentFrame }} / {{ videoState.totalFrames }}
                 </span>
-                <span class="text-copy-xs text-tertiary">
+                <span class="text-copy-sm text-tertiary">
                   {{ Math.round(videoState.progress * 100) }}%
                 </span>
               </div>

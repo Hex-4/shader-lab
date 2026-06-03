@@ -21,7 +21,7 @@ const { label, side = "bottom", forceOpen = false } = defineProps<Props>();
         :side="side"
         :side-offset="8"
         :collision-padding="12"
-        class="z-50 rounded-lg border border-edge bg-base-1 px-2.5 py-1.5 text-copy-xs text-secondary shadow-lg backdrop-blur-xl animate-contentShow"
+        class="z-50 rounded-lg border border-edge bg-base-1 px-2.5 py-1.5 text-copy-sm text-secondary shadow-lg backdrop-blur-xl animate-contentShow"
       >
         {{ label }}
       </TooltipContent>
@@ -38,7 +38,7 @@ const { label, side = "bottom", forceOpen = false } = defineProps<Props>();
         :side="side"
         :side-offset="8"
         :collision-padding="12"
-        class="z-50 rounded-lg border border-edge bg-base-1 px-2.5 py-1.5 text-copy-xs text-secondary shadow-lg backdrop-blur-xl data-[state=delayed-open]:animate-contentShow"
+        class="z-50 rounded-lg border border-edge bg-base-1 px-2.5 py-1.5 text-copy-sm text-secondary shadow-lg backdrop-blur-xl data-[state=delayed-open]:animate-contentShow"
       >
         {{ label }}
       </TooltipContent>

@@ -148,36 +148,41 @@
    * TYPOGRAPHY
    * ═══════════════════════════════════════
    */
-  --text-title-lg: var(--text-5xl);
+  /* One size for the whole app (14px). Keep html at 16px so rem spacing stays stable. */
+  --text-ui: 14px;
+  --text-ui--font-weight: 400;
+  --text-ui--line-height: 1.25rem;
+
+  --text-title-lg: var(--text-ui);
   --text-title-lg--font-weight: 400;
 
-  --text-title: var(--text-4xl);
+  --text-title: var(--text-ui);
   --text-title--font-weight: 400;
 
-  --text-title-md: var(--text-2xl);
+  --text-title-md: var(--text-ui);
   --text-title-md--font-weight: 400;
 
-  --text-title-sm: var(--text-xl);
+  --text-title-sm: var(--text-ui);
   --text-title-sm--font-weight: 400;
 
-  --text-copy-xl: var(--text-lg);
+  --text-copy-xl: var(--text-ui);
   --text-copy-xl--font-weight: 400;
 
-  --text-copy-lg: var(--text-base);
+  --text-copy-lg: var(--text-ui);
   --text-copy-lg--font-weight: 400;
 
-  --text-copy: var(--text-sm);
+  --text-copy: var(--text-ui);
   --text-copy--font-weight: 400;
 
-  --text-copy-sm: var(--text-xs);
+  --text-copy-sm: var(--text-ui);
   --text-copy-sm--font-weight: 400;
-  --text-copy-sm--line-height: 1.1rem;
+  --text-copy-sm--line-height: var(--text-ui--line-height);
 
-  --text-copy-xs: 0.625rem;
+  --text-copy-xs: var(--text-ui);
   --text-copy-xs--font-weight: 400;
 
-  --text-label: var(--text-sm);
-  --text-label--font-weight: 500;
+  --text-label: var(--text-ui);
+  --text-label--font-weight: 400;
 
   /*
    * ═══════════════════════════════════════
@@ -353,9 +358,55 @@
   color: var(--warn);
 }
 
+@utility text-ui {
+  font-size: var(--text-ui);
+  font-weight: var(--text-ui--font-weight);
+  line-height: var(--text-ui--line-height);
+}
+
 /* base */
 html,
-body,
+body {
+  min-height: 100dvh;
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  color: var(--text-color-primary);
+  font-size: var(--text-ui);
+  font-weight: var(--text-ui--font-weight);
+  line-height: var(--text-ui--line-height);
+}
+
 #__nuxt {
   min-height: 100dvh;
+}
+
+@layer base {
+  /* Includes teleported dialogs/menus attached to <body> */
+  body :where(*) {
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+  }
+
+  body :is(.font-medium, .font-semibold, .font-bold) {
+    font-weight: var(--text-ui--font-weight);
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
+  }
 }

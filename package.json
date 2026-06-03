@@ -9,6 +9,7 @@
     "preview": "nuxt preview",
     "db:generate": "drizzle-kit generate --config=server/database/drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=server/database/drizzle.config.ts",
+    "migrate": "bun run db:migrate",
     "db:push": "drizzle-kit push --config=server/database/drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config=server/database/drizzle.config.ts"
   },

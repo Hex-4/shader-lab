@@ -38,7 +38,7 @@ function selectLfo(id: string) {
 </script>
 
 <template>
-  <div class="fixed bottom-4 left-60 right-80 z-40 mx-auto flex max-w-lg items-center gap-2 rounded-2xl border border-edge bg-base-1/80 p-2 shadow-2xl backdrop-blur-xl">
+  <div class="mx-auto flex w-full max-w-lg items-center gap-2 rounded-xl border border-edge bg-surface-1/50 p-2">
     <EditorLfoPill
       v-for="lfo in lfos"
       :key="lfo.id"

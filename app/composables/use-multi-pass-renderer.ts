@@ -8,6 +8,10 @@ const INT_UNIFORMS = new Set(["waveType", "shape", "coordMode", "u_pointCount"])
 type RendererOptions = {
   layers?: Ref<LayerInstance[]>;
   getModulatedValue?: Ref<ModulationFn | null>;
+  /** Called before each export frame so LFOs match wall-clock time. */
+  sampleLfosAtTime?: (time: number) => void;
+  /** Offscreen compositor: render at exact pixel size (never mutate canvas.width after GL init). */
+  fixedBufferSize?: Ref<{ width: number; height: number }>;
   globalSpeed?: Ref<number>;
   paused?: Ref<boolean>;
 };
@@ -97,13 +101,24 @@ export function useMultiPassRenderer(
   const paused = options.paused ?? ref(false);
   const layersRef = options.layers;
   const getModulatedValue = options.getModulatedValue;
+  const fixedBufferSize = options.fixedBufferSize;
   let renderer: THREE.WebGLRenderer | null = null;
   let scene: THREE.Scene | null = null;
   let camera: THREE.OrthographicCamera | null = null;
   let geometry: THREE.PlaneGeometry | null = null;
   let animationId: number | null = null;
+  let exportLoopPaused = false;
   let accumulatedTime = 0;
   let lastFrameTime = 0;
+  let savedExportState: {
+    pixelRatio: number;
+    bufferWidth: number;
+    bufferHeight: number;
+    cssWidth: number;
+    cssHeight: number;
+  } | null = null;
+
+  const sampleLfosAtTime = options.sampleLfosAtTime;
 
   const renderTargets = new Map<string, THREE.WebGLRenderTarget>();
   const materials = new Map<string, THREE.ShaderMaterial>();
@@ -260,6 +275,14 @@ export function useMultiPassRenderer(
     const width = renderer.domElement.width;
     const height = renderer.domElement.height;
 
+    // Grain/dither use pixel-sized blocks (ditherScale * u_scale). Match shader-editor
+    // density when rendering at a fixed artwork resolution smaller than the viewport.
+    let scaleUniform = dpr;
+    if (fixedBufferSize) {
+      const refWidth = Math.max(1, window.innerWidth);
+      scaleUniform = width / refWidth;
+    }
+
     const currentPasses = passes.value;
     if (currentPasses.length === 0) return;
 
@@ -281,7 +304,7 @@ export function useMultiPassRenderer(
         }
       }
 
-      const uniforms = buildPassUniforms(pass, time, width, height, dpr);
+      const uniforms = buildPassUniforms(pass, time, width, height, scaleUniform);
 
       if (pass.layerType === "resolve" && !uniforms.u_color) {
         continue;
@@ -341,30 +364,62 @@ export function useMultiPassRenderer(
   }
 
   function animate() {
+    if (exportLoopPaused) return;
     animationId = requestAnimationFrame(animate);
     render();
   }
 
+  function pauseAnimationLoop() {
+    exportLoopPaused = true;
+    paused.value = true;
+    if (animationId !== null) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+  }
+
+  function resumeAnimationLoop() {
+    exportLoopPaused = false;
+    paused.value = false;
+    lastFrameTime = 0;
+    if (renderer && animationId === null) {
+      animate();
+    }
+  }
+
   // ── Resize ──────────────────────────────────────────────────────
+
+  function getCanvasRenderSize(canvas: HTMLCanvasElement) {
+    const fixed = fixedBufferSize?.value;
+    if (fixed && fixed.width >= 1 && fixed.height >= 1) {
+      return { width: fixed.width, height: fixed.height, pixelRatio: 1 };
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width >= 1 && rect.height >= 1) {
+      return { width: rect.width, height: rect.height, pixelRatio: window.devicePixelRatio };
+    }
+    return { width: window.innerWidth, height: window.innerHeight, pixelRatio: window.devicePixelRatio };
+  }
+
+  function resizeRenderTargets() {
+    if (!renderer) return;
+    const rtWidth = renderer.domElement.width;
+    const rtHeight = renderer.domElement.height;
+    for (const rt of renderTargets.values()) {
+      rt.setSize(rtWidth, rtHeight);
+    }
+  }
 
   function resize() {
     if (!renderer) return;
     const canvas = canvasRef.value;
     if (!canvas) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const width = rect.width || window.innerWidth;
-    const height = rect.height || window.innerHeight;
-
-    renderer.setPixelRatio(window.devicePixelRatio);
+    const { width, height, pixelRatio } = getCanvasRenderSize(canvas);
+    renderer.setPixelRatio(pixelRatio);
     renderer.setSize(width, height, false);
-
-    const rtWidth = renderer.domElement.width;
-    const rtHeight = renderer.domElement.height;
-
-    for (const rt of renderTargets.values()) {
-      rt.setSize(rtWidth, rtHeight);
-    }
+    resizeRenderTargets();
   }
 
   // ── Init ────────────────────────────────────────────────────────
@@ -378,9 +433,9 @@ export function useMultiPassRenderer(
       antialias: false,
       preserveDrawingBuffer: true,
     });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    const rect = canvas.getBoundingClientRect();
-    renderer.setSize(rect.width || window.innerWidth, rect.height || window.innerHeight, false);
+    const { width, height, pixelRatio } = getCanvasRenderSize(canvas);
+    renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(width, height, false);
 
     scene = new THREE.Scene();
     camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -469,11 +524,102 @@ export function useMultiPassRenderer(
     }
   }, { immediate: true });
 
+  if (fixedBufferSize) {
+    watch(
+      () => `${fixedBufferSize.value.width}x${fixedBufferSize.value.height}`,
+      () => {
+        if (renderer) resize();
+      },
+    );
+  }
+
+  watch(
+    () => passes.value.length,
+    (len, prev) => {
+      if (renderer && len > 0 && prev === 0) resize();
+    },
+  );
+
   onBeforeUnmount(destroy);
 
+  function configureRenderer(width: number, height: number) {
+    if (!renderer) return;
+    const canvas = renderer.domElement;
+    savedExportState = {
+      pixelRatio: renderer.getPixelRatio(),
+      bufferWidth: canvas.width,
+      bufferHeight: canvas.height,
+      cssWidth: canvas.clientWidth,
+      cssHeight: canvas.clientHeight,
+    };
+    renderer.setPixelRatio(1);
+    renderer.setSize(width, height, false);
+    const rtWidth = renderer.domElement.width;
+    const rtHeight = renderer.domElement.height;
+    for (const rt of renderTargets.values()) {
+      rt.setSize(rtWidth, rtHeight);
+    }
+  }
+
+  function restoreRenderer() {
+    if (!renderer || !savedExportState) return;
+    renderer.setPixelRatio(savedExportState.pixelRatio);
+    renderer.setSize(
+      savedExportState.cssWidth,
+      savedExportState.cssHeight,
+      false,
+    );
+    const rtWidth = renderer.domElement.width;
+    const rtHeight = renderer.domElement.height;
+    for (const rt of renderTargets.values()) {
+      rt.setSize(rtWidth, rtHeight);
+    }
+    savedExportState = null;
+  }
+
+  function renderFrame(time: number) {
+    sampleLfosAtTime?.(time);
+    accumulatedTime = time;
+    lastFrameTime = performance.now() / 1000;
+    render();
+  }
+
+  async function capture(
+    width: number,
+    height: number,
+    filename: string,
+  ): Promise<void> {
+    if (!renderer) return;
+
+    pauseAnimationLoop();
+    configureRenderer(width, height);
+    renderFrame(accumulatedTime);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      renderer!.domElement.toBlob(resolve, "image/png");
+    });
+
+    restoreRenderer();
+    resumeAnimationLoop();
+
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  }
+
   return {
-    pause: () => { paused.value = true; },
-    resume: () => { paused.value = false; },
+    pause: pauseAnimationLoop,
+    resume: resumeAnimationLoop,
     getCanvas: (): HTMLCanvasElement | null => renderer?.domElement ?? null,
+    syncCanvasSize: resize,
+    configureRenderer,
+    restoreRenderer,
+    renderFrame,
+    capture,
   };
 }

@@ -1,7 +1,6 @@
-import type { ArtworkDocument, ArtworkLayer } from "#shared/types/artwork";
+import type { ArtworkDocument } from "#shared/types/artwork";
 import type { LayerInstance, LFOSource, ModulationAssignment } from "#shared/types/editor";
-import { drawArtworkLayers } from "#shared/artwork/draw-artwork";
-import { compilePasses } from "#shared/editor/compile-passes";
+import { drawArtworkLayers, type ArtworkImageCache } from "#shared/artwork/draw-artwork";
 
 /**
  * Composites linked shader(s) + text/image layers into a display canvas.
@@ -10,9 +9,12 @@ export function useArtworkPreview(
   displayCanvasRef: Ref<HTMLCanvasElement | null>,
   artwork: Ref<ArtworkDocument>,
   shaderCache: Ref<Record<string, { layers: LayerInstance[]; lfos: LFOSource[]; assignments: ModulationAssignment[] }>>,
+  hideTextLayerId?: Ref<string | null>,
 ) {
   const offscreenShaderCanvas = ref<HTMLCanvasElement | null>(null);
   const activeShaderCanvasRef = computed(() => offscreenShaderCanvas.value);
+
+  const shaderBufferSize = computed(() => artwork.value.canvas);
 
   const shaderLayers = computed(() => artwork.value.layers.filter((l) => l.type === "shader" && l.enabled));
 
@@ -26,29 +28,58 @@ export function useArtworkPreview(
   const lfosRef = computed(() => primaryShader.value?.lfos ?? []);
   const assignmentsRef = computed(() => primaryShader.value?.assignments ?? []);
 
-  const { getModulatedValue } = useModulationEngine(lfosRef, assignmentsRef);
+  const { getModulatedValue, sampleLfosAtTime } = useModulationEngine(lfosRef, assignmentsRef);
   const modFn = computed(() => getModulatedValue);
   const { passes } = useLayerCompiler(layersRef, modFn, lfosRef, assignmentsRef);
 
-  useMultiPassRenderer(activeShaderCanvasRef, passes, {
+  const rendererControls = useMultiPassRenderer(activeShaderCanvasRef, passes, {
     layers: layersRef,
     getModulatedValue: modFn,
+    sampleLfosAtTime,
+    fixedBufferSize: shaderBufferSize,
   });
 
+  const imageCache = ref<ArtworkImageCache>(new Map());
+
+  async function loadArtworkImages() {
+    if (import.meta.server) return;
+
+    const cache = new Map(imageCache.value);
+    for (const layer of artwork.value.layers) {
+      if (layer.type === "image" && layer.src && !cache.has(layer.src)) {
+        await new Promise<void>((resolve) => {
+          const img = new window.Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => {
+            cache.set(layer.src, img);
+            resolve();
+          };
+          img.onerror = () => resolve();
+          img.src = layer.src;
+        });
+      }
+    }
+    imageCache.value = cache;
+  }
+
+  watch(
+    () => artwork.value.layers.map((l) => (l.type === "image" ? l.src : "")).join("|"),
+    () => loadArtworkImages(),
+    { immediate: import.meta.client },
+  );
+
   onMounted(() => {
-    const c = document.createElement("canvas");
-    offscreenShaderCanvas.value = c;
+    offscreenShaderCanvas.value = document.createElement("canvas");
   });
 
   onUnmounted(() => {
     offscreenShaderCanvas.value = null;
   });
 
-  function resizeCanvases() {
+  function resizeDisplayCanvas() {
     const display = displayCanvasRef.value;
     if (!display) return;
 
-    const { width, height } = artwork.value.canvas;
     const dpr = window.devicePixelRatio || 1;
     const rect = display.getBoundingClientRect();
     const w = Math.max(1, Math.floor(rect.width * dpr));
@@ -58,18 +89,12 @@ export function useArtworkPreview(
       display.width = w;
       display.height = h;
     }
-
-    const off = offscreenShaderCanvas.value;
-    if (off) {
-      off.width = width;
-      off.height = height;
-    }
   }
 
   let frameId: number | null = null;
 
   function composite() {
-    resizeCanvases();
+    resizeDisplayCanvas();
     const display = displayCanvasRef.value;
     const off = offscreenShaderCanvas.value;
     if (!display) return;
@@ -84,13 +109,17 @@ export function useArtworkPreview(
     ctx.fillStyle = "#0a0a0a";
     ctx.fillRect(0, 0, dw, dh);
 
-    if (off && primaryShader.value) {
+    if (off && primaryShader.value && passes.value.length > 0) {
       ctx.drawImage(off, 0, 0, dw, dh);
     }
 
     ctx.save();
     ctx.scale(dw / width, dh / height);
-    drawArtworkLayers(ctx, width, height, artwork.value.layers);
+    const skipId = hideTextLayerId?.value ?? null;
+    const layers = skipId
+      ? artwork.value.layers.filter((l) => l.id !== skipId)
+      : artwork.value.layers;
+    drawArtworkLayers(ctx, width, height, layers, imageCache.value);
     ctx.restore();
   }
 
@@ -111,14 +140,20 @@ export function useArtworkPreview(
     }
   }
 
-  watch([displayCanvasRef, artwork, shaderCache, passes], () => {
-    nextTick(start);
-  }, { deep: true });
+  watch(
+    [displayCanvasRef, artwork, shaderCache, passes, primaryShader],
+    () => nextTick(start),
+    { deep: true },
+  );
 
   onMounted(() => start());
   onUnmounted(() => stop());
 
   return {
     getDisplayCanvas: () => displayCanvasRef.value,
+    rendererControls,
+    sampleLfosAtTime,
+    imageCache,
+    loadArtworkImages,
   };
 }

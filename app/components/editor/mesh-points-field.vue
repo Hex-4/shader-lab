@@ -97,7 +97,7 @@ const sliderSpecs: SliderSpec[] = [
       class="flex flex-col gap-2 rounded-xl bg-surface-1 p-2.5"
     >
       <div class="flex items-center justify-between gap-2">
-        <span class="text-copy-xs font-medium text-secondary select-none">Point {{ labels[i] }}</span>
+        <span class="text-copy-sm text-secondary select-none">Point {{ labels[i] }}</span>
         <UiColorField
           :model-value="pt.color"
           class="shrink-0"

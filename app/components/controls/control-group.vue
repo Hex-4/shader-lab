@@ -21,7 +21,7 @@ const open = ref(defaultOpen);
   <CollapsibleRoot v-model:open="open">
     <div class="flex w-full items-center justify-between pr-2">
       <CollapsibleTrigger
-        class="flex flex-1 cursor-default items-center gap-1.5 px-3 py-2 text-copy-sm font-medium text-secondary transition-colors select-none hover:text-primary"
+        class="flex flex-1 cursor-default items-center gap-1.5 px-3 py-2 text-copy-sm text-secondary transition-colors select-none hover:text-primary"
       >
         <ChevronRightIcon
           :class="[

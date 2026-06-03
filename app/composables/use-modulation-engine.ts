@@ -104,8 +104,7 @@ export function useModulationEngine(
   let animationId: number | null = null;
   let startTime = 0;
 
-  function tick() {
-    const now = (performance.now() - startTime) / 1000;
+  function sampleLfosAtTime(clockSeconds: number) {
     const values: Record<string, number> = {};
     const phases: Record<string, number> = {};
 
@@ -113,8 +112,8 @@ export function useModulationEngine(
       const phaseOffset = lfo.phase / 360;
 
       const rawT = lfo.mode === "pingpong"
-        ? (now * lfo.rate + phaseOffset) % 2
-        : (now * lfo.rate + phaseOffset) % 1;
+        ? (clockSeconds * lfo.rate + phaseOffset) % 2
+        : (clockSeconds * lfo.rate + phaseOffset) % 1;
 
       const t = lfo.mode === "pingpong" && rawT > 1 ? 2 - rawT : rawT;
       const clampedT = Math.max(0, Math.min(1, t));
@@ -125,6 +124,10 @@ export function useModulationEngine(
 
     lfoValues.value = values;
     lfoPhases.value = phases;
+  }
+
+  function tick() {
+    sampleLfosAtTime((performance.now() - startTime) / 1000);
     animationId = requestAnimationFrame(tick);
   }
 
@@ -153,5 +156,6 @@ export function useModulationEngine(
     lfoValues,
     lfoPhases,
     getModulatedValue,
+    sampleLfosAtTime,
   };
 }

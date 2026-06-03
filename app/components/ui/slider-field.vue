@@ -66,14 +66,14 @@ function commitValue(e: Event) {
         ref="inputRef"
         :value="displayValue"
         type="text"
-        class="h-4 w-12 rounded bg-surface-2 px-1 text-right font-mono text-copy-xs text-primary outline-none ring-1 ring-edge-strong"
+        class="h-4 w-12 rounded bg-surface-2 px-1 text-right font-mono text-copy-sm text-primary outline-none ring-1 ring-edge-strong"
         @blur="commitValue"
         @keydown.enter="($event.target as HTMLInputElement).blur()"
         @keydown.escape="isEditing = false"
       />
       <button
         v-else
-        class="h-4 min-w-8 cursor-text rounded px-1 text-right font-mono text-copy-xs text-tertiary transition-colors hover:text-secondary"
+        class="h-4 min-w-8 cursor-text rounded px-1 text-right font-mono text-copy-sm text-tertiary transition-colors hover:text-secondary"
         @click="startEdit"
       >
         {{ displayValue }}

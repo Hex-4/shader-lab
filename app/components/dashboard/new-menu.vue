@@ -37,7 +37,7 @@ function startArtwork(presetId: string) {
         class="z-50 w-56 rounded-xl border border-edge bg-base-1 p-1 shadow-2xl backdrop-blur-xl data-[state=open]:animate-contentShow"
       >
         <div class="px-2.5 py-1.5">
-          <span class="text-copy-xs font-medium text-tertiary select-none">Shader</span>
+          <span class="text-copy-sm text-tertiary select-none">Shader</span>
         </div>
         <button
           v-for="preset in SHADER_PRESETS"
@@ -47,13 +47,13 @@ function startArtwork(presetId: string) {
           @click="startShader(preset.id)"
         >
           <span class="text-copy-sm text-primary">{{ preset.name }}</span>
-          <span class="line-clamp-1 text-copy-xs text-tertiary">{{ preset.description }}</span>
+          <span class="line-clamp-1 text-copy-sm text-tertiary">{{ preset.description }}</span>
         </button>
 
         <div class="my-1 h-px bg-surface-1" />
 
         <div class="px-2.5 py-1.5">
-          <span class="text-copy-xs font-medium text-tertiary select-none">Artwork</span>
+          <span class="text-copy-sm text-tertiary select-none">Artwork</span>
         </div>
         <button
           v-for="preset in ARTWORK_PRESETS"
@@ -63,7 +63,7 @@ function startArtwork(presetId: string) {
           @click="startArtwork(preset.id)"
         >
           <span class="text-copy-sm text-primary">{{ preset.name }}</span>
-          <span class="line-clamp-1 text-copy-xs text-tertiary">{{ preset.description }}</span>
+          <span class="line-clamp-1 text-copy-sm text-tertiary">{{ preset.description }}</span>
         </button>
       </PopoverContent>
     </PopoverPortal>

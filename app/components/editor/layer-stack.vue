@@ -28,10 +28,10 @@ function handleAddLayer(type: LayerType) {
 </script>
 
 <template>
-  <div class="fixed bottom-4 left-4 top-4 z-40 flex w-56 flex-col">
-    <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-edge bg-base-1/80 shadow-2xl backdrop-blur-xl">
+  <div class="flex h-full min-h-0 flex-col">
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div class="flex shrink-0 items-center justify-between border-b border-edge px-3 py-2.5">
-        <span class="text-copy-sm font-medium text-primary select-none">Layers</span>
+        <span class="text-copy-sm text-primary select-none">Layers</span>
         <PopoverRoot v-model:open="pickerOpen">
           <PopoverTrigger as="button" class="flex size-6 cursor-default items-center justify-center rounded-md text-tertiary transition-colors duration-150 hover:bg-surface-1 hover:text-secondary">
             <PlusIcon class="size-3.5" />
