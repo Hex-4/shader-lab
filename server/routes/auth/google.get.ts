@@ -86,7 +86,7 @@ export default defineOAuthGoogleEventHandler({
       },
     });
 
-    return sendRedirect(event, "/editor");
+    return sendRedirect(event, "/");
   },
   onError(event, error) {
     console.error("Google OAuth error:", error);

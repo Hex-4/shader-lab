@@ -183,7 +183,7 @@ const specularNarrow = computed(() => {
 
 <template>
   <UiContextMenu>
-    <NuxtLink :to="`/editor/${id}`" class="block">
+    <NuxtLink :to="`/shader/${id}`" class="block">
       <div class="flex flex-col gap-2.5">
         <!-- Outer hover wrapper (stable hover zone + scale) -->
         <div

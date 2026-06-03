@@ -5,9 +5,9 @@ export default defineEventHandler(async (event) => {
 
   const result = await db
     .select()
-    .from(compositions)
-    .where(eq(compositions.userId, userId))
-    .orderBy(desc(compositions.updatedAt));
+    .from(artworks)
+    .where(eq(artworks.userId, userId))
+    .orderBy(desc(artworks.updatedAt));
 
   return result;
 });

@@ -6,13 +6,13 @@ export default defineEventHandler(async (event) => {
   const db = useDrizzle();
 
   // Verify ownership
-  const [composition] = await db
-    .select({ id: compositions.id })
-    .from(compositions)
-    .where(and(eq(compositions.id, id), eq(compositions.userId, userId)))
+  const [shader] = await db
+    .select({ id: shaders.id })
+    .from(shaders)
+    .where(and(eq(shaders.id, id), eq(shaders.userId, userId)))
     .limit(1);
 
-  if (!composition) {
+  if (!shader) {
     throw createError({ statusCode: 404, statusMessage: "Composition not found" });
   }
 
@@ -29,14 +29,14 @@ export default defineEventHandler(async (event) => {
   const key = `thumbnails/${id}.png`;
   const thumbnailUrl = await s3.putObject(key, file.data, "image/png");
 
-  // Update the composition record
+  // Update the shader record
   await db
-    .update(compositions)
+    .update(shaders)
     .set({
       thumbnailUrl,
       thumbnailUpdatedAt: new Date(),
     })
-    .where(eq(compositions.id, id));
+    .where(eq(shaders.id, id));
 
   return { thumbnailUrl };
 });

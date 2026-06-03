@@ -15,7 +15,20 @@ export const users = pgTable("users", {
   ...timestamps,
 });
 
-export const compositions = pgTable("compositions", {
+/** Reusable shader stack (layers + LFOs). */
+export const shaders = pgTable("shaders", {
+  id: text("id").primaryKey().$defaultFn(() => uuidv7()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull().default("Untitled"),
+  data: jsonb("data").notNull(),
+  isPublic: boolean("is_public").notNull().default(false),
+  thumbnailUrl: text("thumbnail_url"),
+  thumbnailUpdatedAt: timestamp("thumbnail_updated_at", { withTimezone: true }),
+  ...timestamps,
+});
+
+/** Canvas document (shader + text + image layers). */
+export const artworks = pgTable("artworks", {
   id: text("id").primaryKey().$defaultFn(() => uuidv7()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull().default("Untitled"),

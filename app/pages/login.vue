@@ -6,7 +6,7 @@ useHead({ title: "Login — Shader Lab" });
 const { loggedIn } = useUserSession();
 
 if (loggedIn.value) {
-  navigateTo("/editor");
+  navigateTo("/");
 }
 
 const error = useRoute().query.error as string | undefined;

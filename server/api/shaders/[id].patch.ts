@@ -13,9 +13,9 @@ export default defineEventHandler(async (event) => {
   if (body.isPublic !== undefined) updates.isPublic = body.isPublic;
 
   const [updated] = await db
-    .update(compositions)
+    .update(shaders)
     .set(updates)
-    .where(and(eq(compositions.id, id), eq(compositions.userId, userId)))
+    .where(and(eq(shaders.id, id), eq(shaders.userId, userId)))
     .returning();
 
   if (!updated) {

@@ -5,28 +5,28 @@ export default defineEventHandler(async (event) => {
 
   const db = useDrizzle();
 
-  // Try to get authenticated user (optional for public compositions)
+  // Try to get authenticated user (optional for public shaders)
   let userId: string | null = null;
   try {
     const session = await getUserSession(event);
     userId = session.secure?.userId ?? null;
   } catch {
-    // Not authenticated — only public compositions accessible
+    // Not authenticated — only public shaders accessible
   }
 
-  const [composition] = await db
+  const [shader] = await db
     .select()
-    .from(compositions)
+    .from(shaders)
     .where(
       userId
-        ? and(eq(compositions.id, id), or(eq(compositions.userId, userId), eq(compositions.isPublic, true)))
-        : and(eq(compositions.id, id), eq(compositions.isPublic, true)),
+        ? and(eq(shaders.id, id), or(eq(shaders.userId, userId), eq(shaders.isPublic, true)))
+        : and(eq(shaders.id, id), eq(shaders.isPublic, true)),
     )
     .limit(1);
 
-  if (!composition) {
+  if (!shader) {
     throw createError({ statusCode: 404, statusMessage: "Composition not found" });
   }
 
-  return composition;
+  return shader;
 });

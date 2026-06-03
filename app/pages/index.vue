@@ -1,83 +1,125 @@
 <script setup lang="ts">
-import { PlusIcon } from "lucide-vue-next";
-
 useHead({ title: "Shader Lab" });
 
-const { data: compositions, refresh } = await useFetch("/api/compositions");
+type LibraryTab = "shaders" | "artworks";
 
-// Thumbnails are captured client-side from the editor and uploaded on save
+const tab = ref<LibraryTab>("artworks");
 
-const newDialogOpen = ref(false);
+const { data: shaders, refresh: refreshShaders } = await useFetch("/api/shaders");
+const { data: artworks, refresh: refreshArtworks } = await useFetch("/api/artworks");
 
-function openNewDialog() {
-  newDialogOpen.value = true;
+async function refresh() {
+  await Promise.all([refreshShaders(), refreshArtworks()]);
 }
 
-function startWithPreset(presetId: string) {
-  navigateTo({ path: "/editor", query: { preset: presetId } });
-}
-
-async function deleteComposition(id: string) {
-  await $fetch(`/api/compositions/${id}`, { method: "DELETE" });
+async function deleteShader(id: string) {
+  await $fetch(`/api/shaders/${id}`, { method: "DELETE" });
   await refresh();
 }
 
-async function duplicateComposition(id: string) {
-  const source = compositions.value?.find((c: any) => c.id === id) as any;
+async function deleteArtwork(id: string) {
+  await $fetch(`/api/artworks/${id}`, { method: "DELETE" });
+  await refresh();
+}
+
+async function duplicateShader(id: string) {
+  const source = (shaders.value as any[])?.find((s) => s.id === id);
   if (!source) return;
-  await $fetch("/api/compositions", {
+  await $fetch("/api/shaders", {
     method: "POST",
     body: { name: `${source.name} Copy`, data: source.data },
   });
   await refresh();
 }
+
+async function duplicateArtwork(id: string) {
+  const source = (artworks.value as any[])?.find((a) => a.id === id);
+  if (!source) return;
+  await $fetch("/api/artworks", {
+    method: "POST",
+    body: { name: `${source.name} Copy`, data: source.data },
+  });
+  await refresh();
+}
+
+const isEmpty = computed(() => {
+  if (tab.value === "shaders") return !(shaders.value as any[])?.length;
+  return !(artworks.value as any[])?.length;
+});
 </script>
 
 <template>
   <div class="min-h-dvh bg-base-0">
-    <!-- Header -->
     <header class="sticky top-0 z-10 flex items-center justify-between border-b border-edge bg-base-0/80 px-6 py-4 backdrop-blur-xl">
       <h1 class="text-title-sm font-semibold text-primary select-none">Shader Lab</h1>
       <div class="flex items-center gap-3">
-        <UiButton variant="action" :icon-left="PlusIcon" @click="openNewDialog">
-          New
-        </UiButton>
+        <DashboardNewMenu />
         <DashboardUserMenu />
       </div>
     </header>
 
-    <!-- Content -->
     <main class="mx-auto max-w-5xl px-6 py-8">
-      <!-- Empty state -->
-      <div
-        v-if="!compositions?.length"
-        class="flex flex-col items-center justify-center gap-4 py-24"
-      >
-        <p class="text-copy-sm text-tertiary">No compositions yet.</p>
-        <UiButton variant="action" :icon-left="PlusIcon" @click="openNewDialog">
-          Create your first shader
-        </UiButton>
+      <div class="mb-6 flex gap-1 rounded-lg bg-surface-1 p-1">
+        <button
+          type="button"
+          class="flex-1 rounded-md px-3 py-1.5 text-copy-sm font-medium transition-colors duration-150"
+          :class="tab === 'artworks' ? 'bg-base-1 text-primary shadow-sm' : 'text-tertiary hover:text-secondary'"
+          @click="tab = 'artworks'"
+        >
+          Artworks
+        </button>
+        <button
+          type="button"
+          class="flex-1 rounded-md px-3 py-1.5 text-copy-sm font-medium transition-colors duration-150"
+          :class="tab === 'shaders' ? 'bg-base-1 text-primary shadow-sm' : 'text-tertiary hover:text-secondary'"
+          @click="tab = 'shaders'"
+        >
+          Shaders
+        </button>
       </div>
 
-      <!-- Composition grid -->
+      <div
+        v-if="isEmpty"
+        class="flex flex-col items-center justify-center gap-4 py-24"
+      >
+        <p class="text-copy-sm text-tertiary">
+          {{ tab === 'artworks' ? 'No artworks yet.' : 'No shaders yet.' }}
+        </p>
+      </div>
+
+      <div
+        v-else-if="tab === 'shaders'"
+        class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+      >
+        <DashboardCompositionCard
+          v-for="item in (shaders as any[])"
+          :key="item.id"
+          :id="item.id"
+          :name="item.name"
+          :thumbnail-url="item.thumbnailUrl"
+          :updated-at="item.updatedAt"
+          :data="item.data"
+          @delete="deleteShader(item.id)"
+          @duplicate="duplicateShader(item.id)"
+        />
+      </div>
+
       <div
         v-else
         class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
       >
-        <DashboardCompositionCard
-          v-for="comp in (compositions as any[])"
-          :key="comp.id"
-          :id="comp.id"
-          :name="comp.name"
-          :thumbnail-url="comp.thumbnailUrl"
-          :updated-at="comp.updatedAt"
-          :data="comp.data"
-          @delete="deleteComposition(comp.id)"
-          @duplicate="duplicateComposition(comp.id)"
+        <DashboardArtworkCard
+          v-for="item in (artworks as any[])"
+          :key="item.id"
+          :id="item.id"
+          :name="item.name"
+          :thumbnail-url="item.thumbnailUrl"
+          :updated-at="item.updatedAt"
+          :data="item.data"
+          @delete="deleteArtwork(item.id)"
+          @duplicate="duplicateArtwork(item.id)"
         />
       </div>
     </main>
-
-    <DashboardNewCompositionDialog v-model:open="newDialogOpen" @select="startWithPreset" />
   </div>
 </template>

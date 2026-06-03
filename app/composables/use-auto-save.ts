@@ -1,39 +1,42 @@
-import type { LayerInstance, LFOSource, ModulationAssignment } from "#shared/types/editor";
 import { useDebounceFn } from "@vueuse/core";
 
-type CompositionData = {
-  version: 1;
-  layers: LayerInstance[];
-  lfos: LFOSource[];
-  assignments: ModulationAssignment[];
+export type AutoSaveKind = "shader" | "artwork";
+
+type AutoSaveOptions = {
+  kind: AutoSaveKind;
+  getCanvas?: () => HTMLCanvasElement | null;
+  /** When false, skips initial POST on mount (e.g. artwork bootstrap). */
+  enabled?: Ref<boolean>;
 };
 
 export function useAutoSave(
-  compositionId: Ref<string | null>,
-  compositionName: Ref<string>,
-  data: Ref<CompositionData>,
-  getCanvas?: () => HTMLCanvasElement | null,
+  documentId: Ref<string | null>,
+  documentName: Ref<string>,
+  data: Ref<unknown>,
+  options: AutoSaveOptions,
 ) {
+  const apiBase = options.kind === "shader" ? "/api/shaders" : "/api/artworks";
+  const editorPath = options.kind === "shader" ? "/shader" : "/artwork";
+
   let hasCapturedThumbnail = false;
 
   async function save() {
     try {
-      if (!compositionId.value) {
-        const result = await $fetch("/api/compositions", {
+      if (!documentId.value) {
+        const result = await $fetch(apiBase, {
           method: "POST",
-          body: { name: compositionName.value, data: toRaw(data.value) },
+          body: { name: documentName.value, data: toRaw(data.value) },
         });
-        compositionId.value = (result as { id: string }).id;
-        history.replaceState(null, "", `/editor/${compositionId.value}`);
+        documentId.value = (result as { id: string }).id;
+        history.replaceState(null, "", `${editorPath}/${documentId.value}`);
       } else {
-        await $fetch(`/api/compositions/${compositionId.value}`, {
+        await $fetch(`${apiBase}/${documentId.value}`, {
           method: "PATCH",
-          body: { name: compositionName.value, data: toRaw(data.value) },
+          body: { name: documentName.value, data: toRaw(data.value) },
         });
       }
 
-      // Capture thumbnail on first save, then every 30 seconds
-      if (!hasCapturedThumbnail) {
+      if (!hasCapturedThumbnail && options.getCanvas) {
         hasCapturedThumbnail = true;
         setTimeout(() => captureThumbnail(), 500);
       }
@@ -43,8 +46,8 @@ export function useAutoSave(
   }
 
   async function captureThumbnail() {
-    if (!compositionId.value || !getCanvas) return;
-    const canvas = getCanvas();
+    if (!documentId.value || !options.getCanvas) return;
+    const canvas = options.getCanvas();
     if (!canvas) return;
 
     try {
@@ -64,7 +67,7 @@ export function useAutoSave(
       const formData = new FormData();
       formData.append("file", blob, "thumbnail.png");
 
-      await $fetch(`/api/compositions/${compositionId.value}/thumbnail`, {
+      await $fetch(`${apiBase}/${documentId.value}/thumbnail`, {
         method: "POST",
         body: formData,
       });
@@ -75,13 +78,23 @@ export function useAutoSave(
 
   const debouncedSave = useDebounceFn(save, 300);
 
-  // Save immediately for new compositions
+  const enabled = options.enabled ?? ref(true);
+
   onMounted(() => {
-    if (!compositionId.value) {
+    if (!documentId.value && enabled.value) {
       save();
     }
   });
 
-  watch(data, () => debouncedSave(), { deep: true });
-  watch(compositionName, () => debouncedSave());
+  watch(data, () => {
+    if (enabled.value) debouncedSave();
+  }, { deep: true });
+  watch(documentName, () => {
+    if (enabled.value) debouncedSave();
+  });
+  watch(enabled, (ok) => {
+    if (ok && !documentId.value) save();
+  });
+
+  return { save };
 }

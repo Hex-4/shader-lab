@@ -7,9 +7,9 @@ export default defineEventHandler(async (event) => {
   const db = useDrizzle();
 
   const [deleted] = await db
-    .delete(compositions)
-    .where(and(eq(compositions.id, id), eq(compositions.userId, userId)))
-    .returning({ id: compositions.id });
+    .delete(artworks)
+    .where(and(eq(artworks.id, id), eq(artworks.userId, userId)))
+    .returning({ id: artworks.id });
 
   if (!deleted) {
     throw createError({ statusCode: 404, statusMessage: "Composition not found" });

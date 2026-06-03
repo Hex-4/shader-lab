@@ -3,7 +3,7 @@ import postgres from "postgres";
 import * as schema from "../database/schema";
 
 export { eq, and, or, asc, desc, sql } from "drizzle-orm";
-export { users, compositions } from "../database/schema";
+export { users, shaders, artworks } from "../database/schema";
 
 let client: ReturnType<typeof drizzle> | null = null;
 
