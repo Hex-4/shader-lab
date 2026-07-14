@@ -16,12 +16,7 @@ if (!experiment) {
 
 useHead({ title: `${experiment.name} — Shader Lab` });
 
-// Dynamic OG image based on current URL state
-const ogImageUrl = computed(() => {
-  const s = route.query.s as string | undefined;
-  const state = s || "_";
-  return `https://shader.zeitwork.com/api/og/${experimentId}/${state}`;
-});
+const ogImageUrl = "https://shader.zeitwork.com/og-image.png";
 
 useSeoMeta({
   ogTitle: () => `${experiment.name} — Shader Lab`,

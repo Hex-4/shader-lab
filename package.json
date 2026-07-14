@@ -9,9 +9,7 @@
     "preview": "nuxt preview"
   },
   "dependencies": {
-    "@napi-rs/canvas": "^0.1.92",
     "@vueuse/core": "^14.0.0",
-    "gl": "^8.1.6",
     "lucide-vue-next": "^0.563.0",
     "mediabunny": "^1.34.4",
     "nuxt": "^4.3.0",
@@ -22,7 +20,6 @@
   "devDependencies": {
     "@nuxt/fonts": "^0.12.1",
     "@tailwindcss/vite": "^4.1.18",
-    "@types/gl": "^6.0.5",
     "@types/three": "^0.150.1",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
